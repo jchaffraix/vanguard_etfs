@@ -1,12 +1,10 @@
 package main
 
 import (
-  "bytes"
   "encoding/xml"
   "encoding/json"
   "fmt"
   "io"
-  "net/http"
   "os"
   "strings"
 )
@@ -38,14 +36,18 @@ type EdgarSubmission struct {
   } `xml:"formData"`
 }
 
-func parseEdgarXMLSubmission(r io.Reader) error {
-  decoder := xml.NewDecoder(r)
-  submission := EdgarSubmission{}
-  err := decoder.Decode(&submission)
-  if err != nil {
-    return err
+func fetchEdgarSubmission(accessionNumber string) error {
+  url := fmt.Sprintf(kUrlXmlSubmission, accessionNumber)
+  fmt.Printf("About to query %s\n", url)
+
+  ua := os.Getenv("USER_AGENT")
+  if ua == "" {
+    panic("No \"User-Agent\" in the environment")
   }
-  fmt.Printf("Parsed: %+v\n", submission)
+  c := NewEdgarClient(ua)
+  submission := EdgarSubmission{}
+  c.GetXml(url, &submission)
+  fmt.Printf("submission: %+v\n", submission)
 
   pct := float32(0.0)
   for _, invst := range submission.FormData.InvstOrSecs.Invst {
@@ -55,35 +57,6 @@ func parseEdgarXMLSubmission(r io.Reader) error {
   fmt.Printf("Allocated: %f\n", pct)
   // TODO: This is above 100% right now.
   return nil
-}
-
-func fetchEdgarSubmission(accessionNumber string) error {
-  url := fmt.Sprintf(kUrlXmlSubmission, accessionNumber)
-  fmt.Printf("About to query %s\n", url)
-  req, err := http.NewRequest("GET", url, nil)
-  if err != nil {
-    return err
-  }
-
-  //req.Header.Add("User-Agent", "
-  req.Header.Add("Accept-Encoding", "gzip")
-  req.Header.Add("Accept-Encoding", "deflate")
-  req.Header.Add("Host", "www.sec.gov")
-
-  client := &http.Client{}
-  resp, err := client.Do(req)
-  if err != nil {
-    return err
-  }
-  defer resp.Body.Close()
-  bodyBytes, err := io.ReadAll(resp.Body)
-  if err != nil {
-    return err
-  }
-  //fmt.Print("Resp bytes: %s", string(bodyBytes))
-  fmt.Print("Resp headers: %+v", resp.Header)
-  reader := bytes.NewReader(bodyBytes)
-  return parseEdgarXMLSubmission(reader)
 }
 
 type JsonSubmission struct {
@@ -159,8 +132,6 @@ func main() {
     if err != nil {
       fmt.Printf("Error fetching/parsing EDGAR XML submission, err=%+v", err)
     }
-    // TODO: Enable once we have **rate limiting**, for now testing one at a time.
-    // https://go.dev/wiki/RateLimiting
     break
   }
 
