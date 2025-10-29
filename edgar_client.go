@@ -4,19 +4,33 @@ import (
   "encoding/xml"
   "encoding/json"
   "net/http"
+  "time"
 )
 
 type EdgarClient struct {
   userAgent string
+  timer *time.Timer
 }
-// TODO: Implement rate limiting at 10/sec (or less).
-// https://go.dev/wiki/RateLimiting
+
+// kThrottleDuration is 110ms, which sets the rate limiting to slightly less than 10/sec.
+// This is required by https://www.sec.gov/about/privacy-information#security
+//
+// Note:  https://go.dev/wiki/RateLimiting recommend a time.Ticker, but that doesn't apply here.
+// TODO: Do we want to callers to customize this?
+const kThrottleDuration = 110 * time.Millisecond
 
 func NewEdgarClient(userAgent string) EdgarClient {
-  return EdgarClient{userAgent}
+  return EdgarClient{userAgent, nil}
 }
 
 func (c EdgarClient) GetResp(url string) (*http.Response, error) {
+  if c.timer != nil {
+    // If we have a timer, wait until it has triggered to ensure proper throttling.
+    // We must clean the timer as we could wait forever if it has already triggered.
+    <-c.timer.C
+    c.timer = nil
+  }
+
   req, err := http.NewRequest("GET", url, nil)
   if err != nil {
     return nil, err
@@ -28,11 +42,8 @@ func (c EdgarClient) GetResp(url string) (*http.Response, error) {
 
   client := &http.Client{}
   resp, err := client.Do(req)
-  if err != nil {
-    return nil, err
-  }
-  //fmt.Print("Resp headers: %+v", resp.Header)
-  return resp, nil
+  c.timer = time.NewTimer(kThrottleDuration)
+  return resp, err
 }
 
 func (c EdgarClient) GetXml(url string, v any) error {
