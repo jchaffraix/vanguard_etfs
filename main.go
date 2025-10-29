@@ -29,7 +29,7 @@ type EdgarSubmission struct {
     GenInfo struct {
       Name string `xml:"seriesName"`
       Id string `xml:"seriesId"`
-    }
+    } `xml:"genInfo"`
     InvstOrSecs struct {
       Invst []InvstOrSec `xml:"invstOrSec"`
     } `xml:"invstOrSecs"`
@@ -47,7 +47,8 @@ func fetchEdgarSubmission(accessionNumber string) error {
   c := NewEdgarClient(ua)
   submission := EdgarSubmission{}
   c.GetXml(url, &submission)
-  fmt.Printf("submission: %+v\n", submission)
+  fmt.Printf("submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.Id)
+  //fmt.Printf("submission: %+v\n", submission)
 
   pct := float32(0.0)
   for _, invst := range submission.FormData.InvstOrSecs.Invst {
@@ -60,25 +61,13 @@ func fetchEdgarSubmission(accessionNumber string) error {
 }
 
 type JsonSubmission struct {
-  Cik                               string `json:"cik"`
-  Phone       string `json:"phone"`
+  Cik string `json:"cik"`
+  Phone string `json:"phone"`
   Filings struct {
     Recent struct {
       AccessionNumber       []string    `json:"accessionNumber"`
       FilingDate            []string    `json:"filingDate"`
-      //ReportDate            []string    `json:"reportDate"`
-      //AcceptanceDateTime    []time.Time `json:"acceptanceDateTime"`
-      Act                   []string    `json:"act"`
       Form                  []string    `json:"form"`
-      FileNumber            []string    `json:"fileNumber"`
-      FilmNumber            []string    `json:"filmNumber"`
-      //Items                 []string    `json:"items"`
-      CoreType              []string    `json:"core_type"`
-      //Size                  []int       `json:"size"`
-      //IsXBRL                []int       `json:"isXBRL"`
-      //IsInlineXBRL          []int       `json:"isInlineXBRL"`
-      PrimaryDocument       []string    `json:"primaryDocument"`
-      PrimaryDocDescription []string    `json:"primaryDocDescription"`
     } `json:"recent"`
   } `json:"filings"`
 }
