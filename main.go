@@ -1,9 +1,11 @@
 package main
 
 import (
+  "encoding/json"
   "encoding/xml"
   "fmt"
   "os"
+  "slices"
   "strings"
 )
 
@@ -62,6 +64,16 @@ func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error)
   for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
     index.Components = append(index.Components, IndexComponent{component.Name, component.Cusip, component.PctVal})
   }
+  // Sort by weight descending, then CUSIP ascending.
+  slices.SortFunc(index.Components, func (a, b IndexComponent) int {
+    if a.Weight < b.Weight {
+      return 1
+    }
+    if a.Weight > b.Weight {
+      return -1
+    }
+    return strings.Compare(a.Cusip, b.Cusip)
+  })
   return index, nil
 }
 
@@ -155,8 +167,8 @@ func main() {
     }
     indexMap[etfName] = index
   }
-  fmt.Printf("All indexes: %+v", indexMap)
-
+  bytes, err := json.Marshal(indexMap)
+  fmt.Printf("All indexes JSON: %s", bytes)
   // TODO: Use some DB to qualify the stock, something like:
   // https://github.com/JerBouma/FinanceDatabase/tree/main
 }
