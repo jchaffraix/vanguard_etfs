@@ -16,42 +16,53 @@ const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%s.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
-type InvstOrSec struct {
-  Name string `xml:"name"`
-  Cusip string `xml:"cusip"`
-  PctVal float32 `xml:"pctVal"`
-}
-
 type SingleSubmission struct {
   XMLName xml.Name `xml:"edgarSubmission"`
   FormData struct {
     GenInfo struct {
       Name string `xml:"seriesName"`
-      Id string `xml:"seriesId"`
+      SeriesId string `xml:"seriesId"`
     } `xml:"genInfo"`
     InvstOrSecs struct {
-      Invst []InvstOrSec `xml:"invstOrSec"`
+      InvstOrSec []struct {
+        Name string `xml:"name"`
+        Cusip string `xml:"cusip"`
+        PctVal float32 `xml:"pctVal"`
+      } `xml:"invstOrSec"`
     } `xml:"invstOrSecs"`
   } `xml:"formData"`
 }
 
-func fetchSingleSubmission(c EdgarClient, accessionNumber string) error {
+type IndexComponent struct {
+  Name string
+  Cusip string
+  Weight float32
+}
+
+type Index struct {
+  Name string
+  SeriesId string
+  // Note: The components may add up to more than 100%.
+  Components []IndexComponent
+}
+
+func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error) {
   url := fmt.Sprintf(kUrlSingleSubmissionXml, accessionNumber)
   fmt.Printf("About to query %s\n", url)
 
   submission := SingleSubmission{}
-  c.GetXml(url, &submission)
-  fmt.Printf("submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.Id)
-  //fmt.Printf("submission: %+v\n", submission)
-
-  pct := float32(0.0)
-  for _, invst := range submission.FormData.InvstOrSecs.Invst {
-    pct += invst.PctVal
+  err := c.GetXml(url, &submission)
+  if err != nil {
+    return Index{}, nil
   }
+  fmt.Printf("Fetched submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId)
+  //fmt.Printf("full submission: %+v\n", submission)
 
-  fmt.Printf("Allocated: %f\n", pct)
-  // TODO: This is above 100% right now.
-  return nil
+  index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, []IndexComponent{}}
+  for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
+    index.Components = append(index.Components, IndexComponent{component.Name, component.Cusip, component.PctVal})
+  }
+  return index, nil
 }
 
 type AllSubmissions struct {
@@ -103,6 +114,23 @@ func fetchAllSubmissionsForCik(c EdgarClient, cik string) ([]string, error) {
 
 
 func main() {
+  kSeriesToETF := map[string]string{
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany.
+    "S000002839": "VOO",
+    "S000002841": "VXF",
+    "S000002842": "VUG",
+    "S000002843": "VV",
+    "S000002844": "VO",
+    "S000002845": "VB",
+    "S000002846": "VBK",
+    "S000002847": "VBR",
+    "S000002848": "VTI",
+    "S000012756": "VOT",
+    "S000012757": "VOE",
+    // TODO: Pull from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000736054&action=getcompany (for VXUS)
+    // TODO: Pull from ??? for ESG funds.
+  }
+
   ua := os.Getenv("USER_AGENT")
   if ua == "" {
     panic("No \"User-Agent\" in the environment")
@@ -114,13 +142,20 @@ func main() {
     fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v", err)
     return
   }
-
+  indexMap := map[string]Index{}
   for _, accessionNumber := range accessionNumbers {
-    err = fetchSingleSubmission(c, accessionNumber)
+    index, err := fetchSingleSubmission(c, accessionNumber)
     if err != nil {
       fmt.Printf("Error fetching/parsing single XML submission for %s, err=%+v", accessionNumber, err)
     }
+    etfName, ok := kSeriesToETF[index.SeriesId]
+    if !ok {
+      fmt.Printf("Error: unknown etf for %s (seriesId=%s)", index.Name, index.SeriesId)
+      continue
+    }
+    indexMap[etfName] = index
   }
+  fmt.Printf("All indexes: %+v", indexMap)
 
   // TODO: Use some DB to qualify the stock, something like:
   // https://github.com/JerBouma/FinanceDatabase/tree/main
