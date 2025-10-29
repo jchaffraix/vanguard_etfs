@@ -2,18 +2,17 @@ package main
 
 import (
   "encoding/xml"
-  "encoding/json"
   "fmt"
-  "io"
   "os"
   "strings"
 )
 
 // TODO: Hardcoded Vanguard here.
 // Expects the assession number (without dashes).
-const kUrlXmlSubmission = "https://www.sec.gov/Archives/edgar/data/36405/%s/primary_doc.xml"
+const kUrlSingleSubmissionXml = "https://www.sec.gov/Archives/edgar/data/36405/%s/primary_doc.xml"
 // From: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
-const kUrlJsonSubmissions = "https://data.sec.gov/submissions/CIK0000036405.json"
+// Expected the 10 numbers CIK, including leading zeroes.
+const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%s.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
@@ -23,7 +22,7 @@ type InvstOrSec struct {
   PctVal float32 `xml:"pctVal"`
 }
 
-type EdgarSubmission struct {
+type SingleSubmission struct {
   XMLName xml.Name `xml:"edgarSubmission"`
   FormData struct {
     GenInfo struct {
@@ -36,16 +35,11 @@ type EdgarSubmission struct {
   } `xml:"formData"`
 }
 
-func fetchEdgarSubmission(accessionNumber string) error {
-  url := fmt.Sprintf(kUrlXmlSubmission, accessionNumber)
+func fetchSingleSubmission(c EdgarClient, accessionNumber string) error {
+  url := fmt.Sprintf(kUrlSingleSubmissionXml, accessionNumber)
   fmt.Printf("About to query %s\n", url)
 
-  ua := os.Getenv("USER_AGENT")
-  if ua == "" {
-    panic("No \"User-Agent\" in the environment")
-  }
-  c := NewEdgarClient(ua)
-  submission := EdgarSubmission{}
+  submission := SingleSubmission{}
   c.GetXml(url, &submission)
   fmt.Printf("submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.Id)
   //fmt.Printf("submission: %+v\n", submission)
@@ -60,7 +54,7 @@ func fetchEdgarSubmission(accessionNumber string) error {
   return nil
 }
 
-type JsonSubmission struct {
+type AllSubmissions struct {
   Cik string `json:"cik"`
   Phone string `json:"phone"`
   Filings struct {
@@ -76,15 +70,19 @@ func joinAccessionNumbers(an string) string {
   return strings.Join(strings.Split(an, "-"), "")
 }
 
-func parseJSONSubmissions(r io.Reader) ([]string, error) {
-  decoder := json.NewDecoder(r)
-  v := JsonSubmission{}
-  err := decoder.Decode(&v)
+func fetchAllSubmissionsForCik(c EdgarClient, cik string) ([]string, error) {
+  url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
+  fmt.Printf("About to query %s\n", url)
+
+  v := AllSubmissions{}
+  err := c.GetJson(url, &v)
   if err != nil {
-    return []string{}, err
+    return []string{}, nil
   }
+  fmt.Printf("all submissions for %+v\n", v)
 
   recent := v.Filings.Recent
+  // TODO: We should just return all the NPORT-P and build the entire data rather than the newest filings.
   // First we want to find the newest filing date.
   newestFilingDate := "1999-12-31"
   allAccessionNumbers := map[string] []string{}
@@ -105,25 +103,24 @@ func parseJSONSubmissions(r io.Reader) ([]string, error) {
 
 
 func main() {
-  // TODO: Pull all indexes from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany to filter request (or map them).
-  f, err := os.Open("./CIK0000036405.json")
-  if err != nil {
-    fmt.Printf("Invalid file, err=%+v", err)
-    return
+  ua := os.Getenv("USER_AGENT")
+  if ua == "" {
+    panic("No \"User-Agent\" in the environment")
   }
-  accessionNumbers, err := parseJSONSubmissions(f)
+  c := NewEdgarClient(ua)
+
+  accessionNumbers, err := fetchAllSubmissionsForCik(c, "0000036405")
   if err != nil {
-    fmt.Printf("Couldn't parse EDGAR submission JSON, err=%+v", err)
+    fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v", err)
     return
-  }
-  for _, accessionNumber := range accessionNumbers {
-    err = fetchEdgarSubmission(accessionNumber)
-    if err != nil {
-      fmt.Printf("Error fetching/parsing EDGAR XML submission, err=%+v", err)
-    }
-    break
   }
 
+  for _, accessionNumber := range accessionNumbers {
+    err = fetchSingleSubmission(c, accessionNumber)
+    if err != nil {
+      fmt.Printf("Error fetching/parsing single XML submission for %s, err=%+v", accessionNumber, err)
+    }
+  }
 
   // TODO: Use some DB to qualify the stock, something like:
   // https://github.com/JerBouma/FinanceDatabase/tree/main
