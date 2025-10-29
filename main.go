@@ -127,15 +127,4 @@ func main() {
 
   // TODO: Use some DB to qualify the stock, something like:
   // https://github.com/JerBouma/FinanceDatabase/tree/main
-
-  /*f, err := os.Open("./primary_doc.xml")
-  if err != nil {
-    fmt.Printf("Invalid file, err=%+v", err)
-    return
-  }
-  err = parseEdgarXMLSubmission(f)
-  if err != nil {
-    fmt.Printf("Couldn't parse EDGAR xml, err=%+v", err)
-    return
-  }*/
 }
