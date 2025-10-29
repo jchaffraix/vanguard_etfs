@@ -9,7 +9,8 @@ import (
 
 type EdgarClient struct {
   userAgent string
-  timer *time.Timer
+  client *http.Client // mandatory
+  timer *time.Timer // may be null
 }
 
 // kThrottleDuration is 110ms, which sets the rate limiting to slightly less than 10/sec.
@@ -20,7 +21,10 @@ type EdgarClient struct {
 const kThrottleDuration = 110 * time.Millisecond
 
 func NewEdgarClient(userAgent string) EdgarClient {
-  return EdgarClient{userAgent, nil}
+  // TODO: Get the context with the caller so we can cancel all requests?
+  // TODO: What should be passed to the client?
+  client := &http.Client{}
+  return EdgarClient{userAgent, client, nil}
 }
 
 func (c EdgarClient) GetResp(url string) (*http.Response, error) {
@@ -40,8 +44,7 @@ func (c EdgarClient) GetResp(url string) (*http.Response, error) {
   req.TransferEncoding = append(req.TransferEncoding, "gzip", "deflate")
   req.Header.Add("Host", "www.sec.gov")
 
-  client := &http.Client{}
-  resp, err := client.Do(req)
+  resp, err := c.client.Do(req)
   c.timer = time.NewTimer(kThrottleDuration)
   return resp, err
 }
