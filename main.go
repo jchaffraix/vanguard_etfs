@@ -129,6 +129,7 @@ func main() {
   kSeriesToETF := map[string]string{
     // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany.
     "S000002839": "VOO",
+    "S000002840": "VTV",
     "S000002841": "VXF",
     "S000002842": "VUG",
     "S000002843": "VV",
