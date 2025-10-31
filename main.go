@@ -18,7 +18,7 @@ const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%s.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
-type SingleSubmission struct {
+type singleSubmission struct {
   XMLName xml.Name `xml:"edgarSubmission"`
   FormData struct {
     GenInfo struct {
@@ -28,8 +28,21 @@ type SingleSubmission struct {
     InvstOrSecs struct {
       InvstOrSec []struct {
         Name string `xml:"name"`
-        Cusip string `xml:"cusip"`
         PctVal float32 `xml:"pctVal"`
+        // We don't use `xml:"cusip"` as it is N/A for international stock.
+        Identifiers struct {
+          // According to the specification, one of them.
+          IsIn struct {
+            Value string `xml:"value,attr"`
+          } `xml:"isin"`
+          Ticker struct {
+            Value string `xml:"value,attr"`
+          } `xml:"ticker"`
+          Other struct {
+            OtherDesc string `xml:"otherDesc,attr"`
+            Value string `xml:"value,attr"`
+          } `xml:"other"`
+        } `xml:"identifiers"`
       } `xml:"invstOrSec"`
     } `xml:"invstOrSecs"`
   } `xml:"formData"`
@@ -37,7 +50,10 @@ type SingleSubmission struct {
 
 type IndexComponent struct {
   Name string
+  // Only one of the 3 next field may be present.
   Cusip string
+  Ticker string
+  OtherId string
   Weight float32
 }
 
@@ -48,21 +64,17 @@ type Index struct {
   Components []IndexComponent
 }
 
-func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error) {
-  url := fmt.Sprintf(kUrlSingleSubmissionXml, accessionNumber)
-  fmt.Printf("About to query %s\n", url)
-
-  submission := SingleSubmission{}
-  err := c.GetXml(url, &submission)
-  if err != nil {
-    return Index{}, nil
-  }
-  fmt.Printf("Fetched submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId)
-  //fmt.Printf("full submission: %+v\n", submission)
-
+func populateIndexFromSingleSubmission(submission singleSubmission) Index {
   index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, []IndexComponent{}}
   for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
-    index.Components = append(index.Components, IndexComponent{component.Name, component.Cusip, component.PctVal})
+    if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
+      continue
+    }
+
+    cusip := component.Identifiers.IsIn.Value
+    ticker := component.Identifiers.Ticker.Value
+    other := component.Identifiers.Other.Value
+    index.Components = append(index.Components, IndexComponent{component.Name, cusip, ticker, other, component.PctVal})
   }
   // Sort by weight descending, then CUSIP ascending.
   slices.SortFunc(index.Components, func (a, b IndexComponent) int {
@@ -74,7 +86,22 @@ func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error)
     }
     return strings.Compare(a.Cusip, b.Cusip)
   })
-  return index, nil
+  return index
+}
+
+func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error) {
+  url := fmt.Sprintf(kUrlSingleSubmissionXml, accessionNumber)
+  fmt.Printf("About to query %s\n", url)
+
+  submission := singleSubmission{}
+  err := c.GetXml(url, &submission)
+  if err != nil {
+    return Index{}, nil
+  }
+  fmt.Printf("Fetched submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId)
+  //fmt.Printf("full submission: %+v\n", submission)
+
+  return populateIndexFromSingleSubmission(submission), nil
 }
 
 type AllSubmissions struct {
