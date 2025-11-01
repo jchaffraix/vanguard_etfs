@@ -73,6 +73,7 @@ func TestPopulateIgnore(t *testing.T) {
     invstOrSecXml string
   } {
     {"Ignore CONTRACT_VANGUARD_ID", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><other otherDesc="CONTRACT_VANGUARD_ID" value="V1047133201"/></identifiers><pctVal>-0.003502379516</pctVal></invstOrSec>`},
+    {"Ignore Future", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><ticker value="RTYU5"/></identifiers><pctVal>0.000674480486</pctVal><derivativeInfo><futrDeriv derivCat="FUT"></futrDeriv></derivativeInfo></invstOrSec>`},
   }
   for _, tc := range tt {
     t.Run(tc.name, func (t *testing.T) {

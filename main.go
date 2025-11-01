@@ -43,6 +43,11 @@ type singleSubmission struct {
             Value string `xml:"value,attr"`
           } `xml:"other"`
         } `xml:"identifiers"`
+        DerivativeInfo struct {
+          FutrDeriv struct {
+            DerivCat string `xml:"derivCat,attr"`
+          } `xml:"futrDeriv"`
+        } `xml:"derivativeInfo"`
       } `xml:"invstOrSec"`
     } `xml:"invstOrSecs"`
   } `xml:"formData"`
@@ -68,6 +73,9 @@ func populateIndexFromSingleSubmission(submission singleSubmission) Index {
   index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, []IndexComponent{}}
   for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
     if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
+      continue
+    }
+    if component.DerivativeInfo.FutrDeriv.DerivCat == "FUT" {
       continue
     }
 
