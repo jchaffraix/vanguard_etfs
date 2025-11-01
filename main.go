@@ -351,12 +351,31 @@ func main() {
       indexMap[res.etfName] = index
     }
   }
-  bytes, err := json.Marshal(indexMap)
-  if err != nil {
-    fmt.Printf("Error: marshaling map (err=%+v)\n", err)
-    return
+
+  // TODO: Do we want to preprocess more of the data (e.g. by standardizing tickers to their name)?
+  // This could be done using: https://github.com/JerBouma/FinanceDatabase/tree/main
+
+  for etfName, index := range indexMap {
+    f, err := os.OpenFile(fmt.Sprintf("./data/%s.json", etfName), os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0644)
+    if err != nil {
+      fmt.Printf("Error: opening file for %s (err=%+v)\n", etfName, err)
+      return
+    }
+
+    bytes, err := json.Marshal(index)
+    if err != nil {
+      fmt.Printf("Error: marshaling index for %s (err=%+v, index=%+v)\n", etfName, err, index)
+      return
+    }
+
+    if _, err := f.Write(bytes); err != nil {
+      f.Close() // ignore error; Write error takes precedence
+      fmt.Printf("Error: writing to JSON file for %s (err=%+v)\n", etfName, err)
+      return
+    }
+    if err := f.Close(); err != nil {
+      fmt.Printf("Error: closing file for %s (err=%+v)\n", etfName, err)
+      return
+    }
   }
-  fmt.Printf("All indexes JSON: %s", bytes)
-  // TODO: Use some DB to qualify the stock, something like:
-  // https://github.com/JerBouma/FinanceDatabase/tree/main
 }
