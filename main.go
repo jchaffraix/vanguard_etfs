@@ -247,7 +247,7 @@ func validateIndex(cik int, index Index) ValidationResult {
   }
   res.etfName = etfName(cik, index.SeriesId)
   if res.etfName == "" {
-    res.addWarning(fmt.Sprintf("Index %s is missing seriesName", index.Name))
+    res.addWarning(fmt.Sprintf("Index %s doesn't have a corresponding ETF in our map", index.Name))
   }
 
   // If we have errors, it's not worth continuing.
