@@ -9,12 +9,13 @@ import (
   "strings"
 )
 
-// TODO: Hardcoded Vanguard here.
-// Expects the assession number (without dashes).
-const kUrlSingleSubmissionXml = "https://www.sec.gov/Archives/edgar/data/36405/%s/primary_doc.xml"
+// The first entry is the CIK of the reporting company.
+// The second entry is the assession number (without dashes).
+const kUrlSingleSubmissionXml = "https://www.sec.gov/Archives/edgar/data/%d/%s/primary_doc.xml"
 // From: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
-// Expected the 10 numbers CIK, including leading zeroes.
-const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%s.json"
+// The first entry is the CIK as an int. The expression will automatically normalize it
+// to 10 digits (per EDGAR's format).
+const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%010d.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
@@ -101,8 +102,9 @@ func populateIndexFromSingleSubmission(submission singleSubmission) Index {
   return index
 }
 
-func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error) {
-  url := fmt.Sprintf(kUrlSingleSubmissionXml, accessionNumber)
+func fetchSingleSubmission(c EdgarClient, cik int, accessionNumber string) (Index, error) {
+  // Note: We convert companyId to int to trim the leading zero that are not needed.
+  url := fmt.Sprintf(kUrlSingleSubmissionXml, cik, accessionNumber)
   fmt.Printf("About to query %s\n", url)
 
   submission := singleSubmission{}
@@ -111,7 +113,6 @@ func fetchSingleSubmission(c EdgarClient, accessionNumber string) (Index, error)
     return Index{}, nil
   }
   fmt.Printf("Fetched submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId)
-  //fmt.Printf("full submission: %+v\n", submission)
 
   return populateIndexFromSingleSubmission(submission), nil
 }
@@ -132,7 +133,7 @@ func joinAccessionNumbers(an string) string {
   return strings.Join(strings.Split(an, "-"), "")
 }
 
-func fetchAllSubmissionsForCik(c EdgarClient, cik string) ([]string, error) {
+func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]string, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
   fmt.Printf("About to query %s\n", url)
 
@@ -149,6 +150,7 @@ func fetchAllSubmissionsForCik(c EdgarClient, cik string) ([]string, error) {
   newestFilingDate := "1999-12-31"
   allAccessionNumbers := map[string] []string{}
   for i, filingDate := range recent.FilingDate {
+    // TODO: Should we also handle NPORT-EX too?
     if recent.Form[i] == "NPORT-P" {
       if strings.Compare(filingDate, newestFilingDate) > 0 {
         newestFilingDate = filingDate
@@ -163,24 +165,53 @@ func fetchAllSubmissionsForCik(c EdgarClient, cik string) ([]string, error) {
   return allAccessionNumbers[newestFilingDate], nil
 }
 
+type IndexId struct {
+  Cik int
+  SeriesId string
+}
+
 
 func main() {
-  kSeriesToETF := map[string]string{
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany.
-    "S000002839": "VOO",
-    "S000002840": "VTV",
-    "S000002841": "VXF",
-    "S000002842": "VUG",
-    "S000002843": "VV",
-    "S000002844": "VO",
-    "S000002845": "VB",
-    "S000002846": "VBK",
-    "S000002847": "VBR",
-    "S000002848": "VTI",
-    "S000012756": "VOT",
-    "S000012757": "VOE",
-    // TODO: Pull from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000736054&action=getcompany (for VXUS)
-    // TODO: Pull from ??? for ESG funds.
+  // We store the CIK for the reporting company as int as we need to
+  // pad them with 0s in some cases, but not all.
+  // If you add a new company's CIK here, make sure to add the new
+  // ETFs below else we will ignore them.
+  kCompanyIds := []int{52848, 36405, 736054, 36405}
+  kSeriesToETF := map[IndexId]string{
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany
+    IndexId{36405, "S000002839"}: "VOO",
+    IndexId{36405, "S000002840"}: "VTV",
+    IndexId{36405, "S000002841"}: "VXF",
+    IndexId{36405, "S000002842"}: "VUG",
+    IndexId{36405, "S000002843"}: "VV",
+    IndexId{36405, "S000002844"}: "VO",
+    IndexId{36405, "S000002845"}: "VB",
+    IndexId{36405, "S000002846"}: "VBK",
+    IndexId{36405, "S000002847"}: "VBR",
+    IndexId{36405, "S000002848"}: "VTI",
+    IndexId{36405, "S000012756"}: "VOT",
+    IndexId{36405, "S000012757"}: "VOE",
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000736054&action=getcompany
+    IndexId{736054, "S000002932"}: "VXUS",
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000052848&action=getcompany
+    IndexId{52848, "S000004441"}: "VAW",
+    IndexId{52848, "S000004443"}: "VOX",
+    IndexId{52848, "S000004445"}: "VPU",
+    IndexId{52848, "S000004446"}: "VCR",
+    IndexId{52848, "S000004447"}: "VDC",
+    IndexId{52848, "S000004448"}: "VDE",
+    IndexId{52848, "S000004449"}: "VFH",
+    IndexId{52848, "S000004450"}: "VHT",
+    IndexId{52848, "S000004451"}: "VIS",
+    IndexId{52848, "S000004452"}: "VGT",
+    IndexId{52848, "S000018789"}: "EDV",
+    IndexId{52848, "S000019698"}: "MGC",
+    IndexId{52848, "S000019699"}: "MGV",
+    IndexId{52848, "S000019700"}: "MGK",
+    IndexId{52848, "S000063074"}: "VSGX",
+    IndexId{52848, "S000063075"}: "ESGV",
+    IndexId{52848, "S000069584"}: "VCEB",
+    IndexId{52848, "S000094513"}: "VEXC",
   }
 
   ua := os.Getenv("USER_AGENT")
@@ -189,25 +220,31 @@ func main() {
   }
   c := NewEdgarClient(ua)
 
-  accessionNumbers, err := fetchAllSubmissionsForCik(c, "0000036405")
-  if err != nil {
-    fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v", err)
-    return
-  }
   indexMap := map[string]Index{}
-  for _, accessionNumber := range accessionNumbers {
-    index, err := fetchSingleSubmission(c, accessionNumber)
+  for _, companyId := range kCompanyIds {
+    accessionNumbers, err := fetchAllSubmissionsForCik(c, companyId)
     if err != nil {
-      fmt.Printf("Error fetching/parsing single XML submission for %s, err=%+v", accessionNumber, err)
+      fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
+      return
     }
-    etfName, ok := kSeriesToETF[index.SeriesId]
-    if !ok {
-      fmt.Printf("Error: unknown etf for %s (seriesId=%s)", index.Name, index.SeriesId)
-      continue
+    for _, accessionNumber := range accessionNumbers {
+      index, err := fetchSingleSubmission(c, companyId, accessionNumber)
+      if err != nil {
+        fmt.Printf("Error fetching/parsing single XML submission for %s, err=%+v\n", accessionNumber, err)
+      }
+      etfName, ok := kSeriesToETF[IndexId{companyId, index.SeriesId}]
+      if !ok {
+        fmt.Printf("[Warning] Dropping unknown etf for %s (cik=%010d, seriesId=%s)\n", index.Name, companyId, index.SeriesId)
+        continue
+      }
+      indexMap[etfName] = index
     }
-    indexMap[etfName] = index
   }
   bytes, err := json.Marshal(indexMap)
+  if err != nil {
+    fmt.Printf("Error: marshaling map (err=%+v)\n", err)
+    return
+  }
   fmt.Printf("All indexes JSON: %s", bytes)
   // TODO: Use some DB to qualify the stock, something like:
   // https://github.com/JerBouma/FinanceDatabase/tree/main
