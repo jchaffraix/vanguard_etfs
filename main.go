@@ -72,13 +72,17 @@ type Index struct {
 func populateIndexFromSingleSubmission(submission singleSubmission) Index {
   index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, []IndexComponent{}}
   for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
-    if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
-      continue
-    }
     if component.DerivativeInfo.FutrDeriv.DerivCat == "FUT" {
       continue
     }
+    if component.DerivativeInfo.FutrDeriv.DerivCat == "SWP" {
+      continue
+    }
 
+    // This should be handled by the derivative checks above, but this is kept to be defensive.
+    if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
+      continue
+    }
     cusip := component.Identifiers.IsIn.Value
     ticker := component.Identifiers.Ticker.Value
     other := component.Identifiers.Other.Value
