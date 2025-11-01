@@ -57,11 +57,27 @@ type singleSubmission struct {
 type IndexComponent struct {
   Name string
   // Only one of the 3 next field may be present.
+  // Use IndexComponent.Id() if you want the unique identifier.
   Cusip string
   Ticker string
   OtherId string
   Weight float32
 }
+
+const kMissingId = "<no_id>"
+func (c IndexComponent) Id() string {
+  if c.Cusip != "" {
+    return c.Cusip
+  }
+  if c.Ticker != "" {
+    return c.Ticker
+  }
+  if c.OtherId != "" {
+    return c.OtherId
+  }
+  return kMissingId
+}
+
 
 type Index struct {
   Name string
@@ -165,18 +181,86 @@ func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]string, error) {
   return allAccessionNumbers[newestFilingDate], nil
 }
 
+type ValidationResult struct {
+  etfName string // empty if unknown (and there will be a warning).
+  warnings []string
+  errors []string
+}
+
+func (r *ValidationResult) addError(err string) {
+  r.errors = append(r.errors, err)
+}
+
+func (r *ValidationResult) addWarning(err string) {
+  r.warnings = append(r.warnings, err)
+}
+
+func (r ValidationResult) dump() {
+  hasErrors := len(r.errors) != 0
+  hasWarnings := len(r.warnings) != 0
+  if !hasErrors && !hasWarnings {
+    // No issue, nothing to report.
+    return
+  }
+  fmt.Printf("***************** Validation report for %s *****************\n", r.etfName)
+  if hasErrors {
+    fmt.Printf("Errors:\n")
+    for _, err := range r.errors {
+      fmt.Printf("  %s\n", err)
+    }
+    fmt.Printf("\n\n")
+  }
+  if hasWarnings {
+    fmt.Printf("Warnings:\n")
+    for _, warning := range r.warnings {
+      fmt.Printf("  %s\n", warning)
+    }
+    fmt.Printf("\n\n")
+  }
+}
+
+func validateIndex(cik int, index Index) ValidationResult {
+  res := ValidationResult{"", []string{}, []string{}}
+  if index.Name == "" || index.Name == "N/A" {
+    // TODO: Link to index.
+    res.addError("Index is missing name")
+  }
+  if index.SeriesId == "" {
+    res.addError(fmt.Sprintf("Index %s is missing seriesName", index.Name))
+  }
+  res.etfName = etfName(cik, index.SeriesId)
+  if res.etfName == "" {
+    res.addWarning(fmt.Sprintf("Index %s is missing seriesName", index.Name))
+  }
+
+  // If we have errors, it's not worth continuing.
+  // Doing so, ensure that we have an ETF name to report.
+  if len(res.errors) > 0 || len(res.warnings) > 0 {
+    return res
+  }
+
+  for _, component := range index.Components {
+    componentId := component.Id()
+    if component.Name == "N/A" || component.Name == "" {
+      res.addError(fmt.Sprintf("ETF %s has a missing component for name=%s, id=%s", res.etfName, component.Name, componentId))
+    }
+
+    if componentId == kMissingId {
+      res.addError(fmt.Sprintf("ETF %s has a component with no id, name=%s, id=%s", res.etfName, component.Name, componentId))
+    }
+    if component.Weight < 0 {
+      res.addError(fmt.Sprintf("ETF %s has a component with negative weight, name=%s, id=%s", res.etfName, component.Name, componentId))
+    }
+  }
+  return res
+}
+
 type IndexId struct {
   Cik int
   SeriesId string
 }
 
-
-func main() {
-  // We store the CIK for the reporting company as int as we need to
-  // pad them with 0s in some cases, but not all.
-  // If you add a new company's CIK here, make sure to add the new
-  // ETFs below else we will ignore them.
-  kCompanyIds := []int{52848, 36405, 736054, 36405}
+func etfName(cik int, seriesId string) string {
   kSeriesToETF := map[IndexId]string{
     // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany
     IndexId{36405, "S000002839"}: "VOO",
@@ -214,6 +298,16 @@ func main() {
     IndexId{52848, "S000094513"}: "VEXC",
   }
 
+  etfName, _ := kSeriesToETF[IndexId{cik, seriesId}]
+  return etfName
+}
+
+func main() {
+  // We store the CIK for the reporting company as int as we need to
+  // pad them with 0s in some cases, but not all.
+  // If you add a new company's CIK here, make sure to add the new
+  // ETFs to etfName or we will ignore them.
+  kCompanyIds := []int{52848, 36405, 736054, 36405}
   ua := os.Getenv("USER_AGENT")
   if ua == "" {
     panic("No \"User-Agent\" in the environment")
@@ -232,12 +326,12 @@ func main() {
       if err != nil {
         fmt.Printf("Error fetching/parsing single XML submission for %s, err=%+v\n", accessionNumber, err)
       }
-      etfName, ok := kSeriesToETF[IndexId{companyId, index.SeriesId}]
-      if !ok {
-        fmt.Printf("[Warning] Dropping unknown etf for %s (cik=%010d, seriesId=%s)\n", index.Name, companyId, index.SeriesId)
+      res := validateIndex(companyId, index)
+      res.dump()
+      if res.etfName == "" {
         continue
       }
-      indexMap[etfName] = index
+      indexMap[res.etfName] = index
     }
   }
   bytes, err := json.Marshal(indexMap)
