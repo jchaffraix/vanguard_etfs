@@ -29,8 +29,11 @@ type singleSubmission struct {
     InvstOrSecs struct {
       InvstOrSec []struct {
         Name string `xml:"name"`
+        // The percentages are reported up to E-12 so we shouldn't experience
+        // a loss of precision using float32 based on this underflow table:
+        // https://docs.oracle.com/cd/E60778_01/html/E60763/z4000ac020351.html
         PctVal float32 `xml:"pctVal"`
-        // We don't use `xml:"cusip"` as it is N/A for international stock.
+        // We don't use `xml:"cusip"` as it is N/A for international stock and `<isin>` contains it.
         Identifiers struct {
           // According to the specification, one of them.
           IsIn struct {

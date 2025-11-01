@@ -15,6 +15,11 @@ func TestPopulate(t *testing.T) {
     {"Submission with `isin` and cusip", `<invstOrSec><name>Warby Parker Inc</name><cusip>93403J106</cusip><identifiers><isin value="US93403J1060"/></identifiers><pctVal>0.003502379516</pctVal></invstOrSec>`, IndexComponent{"Warby Parker Inc", "US93403J1060", "", "", 0.003502379516}},
     {"Submission with `other` identifier", `<invstOrSec><name>Daiichi Sankyo Co Ltd</name><cusip>N/A</cusip><identifiers><other otherDesc="FAID" value="023CVR996"/></identifiers><pctVal>0.000000000105</pctVal></invstOrSec>`, IndexComponent{"Daiichi Sankyo Co Ltd", "", "", "023CVR996", 0.000000000105}},
     {"Submission with `ticker` identifier", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000001836174</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000001836174}},
+
+    // Validates we don't underflow.
+    {"Submission with 0.000000558225 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000558225</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000000558225}},
+    {"Submission with 0.000000000987 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000000987</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000000000987}},
+    {"Submission with 0.000000000001 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000000001</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000000000001}},
   }
 
   for _, tc := range tt {
