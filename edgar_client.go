@@ -9,22 +9,46 @@ import (
 
 type EdgarClient struct {
   userAgent string
+  throttleDuration time.Duration
   client *http.Client // mandatory
   timer *time.Timer // may be null
 }
 
-// kThrottleDuration is 110ms, which sets the rate limiting to slightly less than 10/sec.
+// kDefaultThrottleDuration is 105ms, which sets the rate limiting to slightly less than 10/sec.
 // This is required by https://www.sec.gov/about/privacy-information#security
 //
 // Note:  https://go.dev/wiki/RateLimiting recommend a time.Ticker, but that doesn't apply here.
-// TODO: Do we want to callers to customize this?
-const kThrottleDuration = 110 * time.Millisecond
+const kDefaultThrottleDuration = 105 * time.Millisecond
 
 func NewEdgarClient(userAgent string) EdgarClient {
   // TODO: Get the context with the caller so we can cancel all requests?
   // TODO: What should be passed to the client?
   client := &http.Client{}
-  return EdgarClient{userAgent, client, nil}
+  return EdgarClient{userAgent, kDefaultThrottleDuration, client, nil}
+}
+
+func NewEdgarClientWithRps(userAgent string, rps int) EdgarClient {
+  if rps <= 0 {
+    panic("RPS must be in [1, 10]")
+  }
+  if rps > 10 {
+    panic("We don't allow rps > 10 per the SEC guideline to access EDGAR")
+  }
+
+  // Multiplying first gives an actual RPS closer to the requested one.
+  throttleDuration := 1000 * time.Millisecond
+  throttleDuration /= time.Duration(rps)
+
+  // We consider the 10 rps limit as a hard limit so use the
+  // padded kDefaultThrottleDuration to avoid being impacted by
+  // potential clock inaccuracies.
+  if rps == 10 {
+    throttleDuration = kDefaultThrottleDuration
+  }
+  // TODO: Get the context with the caller so we can cancel all requests?
+  // TODO: What should be passed to the client?
+  client := &http.Client{}
+  return EdgarClient{userAgent, throttleDuration, client, nil}
 }
 
 func (c EdgarClient) GetResp(url string) (*http.Response, error) {
@@ -45,7 +69,7 @@ func (c EdgarClient) GetResp(url string) (*http.Response, error) {
   req.Header.Add("Host", "www.sec.gov")
 
   resp, err := c.client.Do(req)
-  c.timer = time.NewTimer(kThrottleDuration)
+  c.timer = time.NewTimer(c.throttleDuration)
   return resp, err
 }
 
