@@ -45,9 +45,18 @@ type singleSubmission struct {
           } `xml:"other"`
         } `xml:"identifiers"`
         DerivativeInfo struct {
+          FwdDeriv struct {
+            DerivCat string `xml:"derivCat,attr"`
+          } `xml:"fwdDeriv"`
           FutrDeriv struct {
             DerivCat string `xml:"derivCat,attr"`
           } `xml:"futrDeriv"`
+          OptionSwaptionWarrantDeriv struct {
+            DerivCat string `xml:"derivCat,attr"`
+          } `xml:"optionSwaptionWarrantDeriv"`
+          OtherDeriv struct {
+            DerivCat string `xml:"derivCat,attr"`
+          } `xml:"othDeriv"`
         } `xml:"derivativeInfo"`
       } `xml:"invstOrSec"`
     } `xml:"invstOrSecs"`
@@ -89,13 +98,17 @@ type Index struct {
 func populateIndexFromSingleSubmission(submission singleSubmission) Index {
   index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, []IndexComponent{}}
   for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
-    if component.DerivativeInfo.FutrDeriv.DerivCat == "FUT" {
+    // Ignore any derivative.
+    if component.DerivativeInfo.FutrDeriv.DerivCat != "" {
       continue
     }
-    if component.DerivativeInfo.FutrDeriv.DerivCat == "SWP" {
+    if component.DerivativeInfo.FwdDeriv.DerivCat != "" {
       continue
     }
-    if component.DerivativeInfo.FutrDeriv.DerivCat == "FWD" {
+    if component.DerivativeInfo.OptionSwaptionWarrantDeriv.DerivCat != "" {
+      continue
+    }
+    if component.DerivativeInfo.OtherDeriv.DerivCat != "" {
       continue
     }
 

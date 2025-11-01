@@ -74,7 +74,21 @@ func TestPopulateIgnore(t *testing.T) {
   } {
     {"Ignore Swap", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><other otherDesc="CONTRACT_VANGUARD_ID" value="V1047133201"/></identifiers><pctVal>-0.003502379516</pctVal><derivativeInfo><swapDeriv derivCat="SWP"></swapDeriv></derivativeInfo></invstOrSec>`},
     {"Ignore Future", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><ticker value="RTYU5"/></identifiers><pctVal>0.000674480486</pctVal><derivativeInfo><futrDeriv derivCat="FUT"></futrDeriv></derivativeInfo></invstOrSec>`},
-    {"Ignore Forward Rate", `<invstOrSec><name>JPY/USD FWD 20250917</name><cusip>N/A</cusip><identifiers><ticker value="JPY"/></identifiers><pctVal>0.000674480486</pctVal><derivativeInfo><futrDeriv derivCat="FWD"></futrDeriv></derivativeInfo></invstOrSec>`},
+    {"Ignore Forward Rate on futrDeriv (invalid)", `<invstOrSec><name>JPY/USD FWD 20250917</name><cusip>N/A</cusip><identifiers><ticker value="JPY"/></identifiers><pctVal>0.000674480486</pctVal><derivativeInfo><futrDeriv derivCat="FWD"></futrDeriv></derivativeInfo></invstOrSec>`},
+    {"Ignore Forward Rate on fwdDeriv", `<invstOrSec>
+<name>N/A</name>
+<title>KRW/USD FWD 20250917</title>
+<identifiers>
+<ticker value="KRW"/>
+</identifiers>
+<pctVal>0.000644726319</pctVal>
+<derivativeInfo>
+<fwdDeriv derivCat="FWD">
+</fwdDeriv>
+</derivativeInfo>
+</invstOrSec>`},
+    {"Ignore Swaption", `<invstOrSec><name>Swaption</name><cusip>N/A</cusip><identifiers><ticker value="SWPTION"/></identifiers><pctVal>0.00037666</pctVal><derivativeInfo><optionSwaptionWarrantDeriv derivCat="SWO"></optionSwaptionWarrantDeriv></derivativeInfo></invstOrSec>`},
+    {"Ignore other derivative", `<invstOrSec><name>Other</name><cusip>N/A</cusip><identifiers><ticker value="Oth"/></identifiers><pctVal>0.00037666</pctVal><derivativeInfo><othDeriv derivCat="OTH"></othDeriv></derivativeInfo></invstOrSec>`},
     // This doesn't seem to happen as contracts are derivative, but this test documents our behavior.
     {"Ignore CONTRACT_VANGUARD_ID (no <derivativeInfo>)", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><other otherDesc="CONTRACT_VANGUARD_ID" value="V1047133201"/></identifiers><pctVal>-0.003502379516</pctVal></invstOrSec>`},
   }
