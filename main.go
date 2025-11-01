@@ -128,7 +128,8 @@ func fetchSingleSubmission(c EdgarClient, cik int, accessionNumber string) (Inde
   if err != nil {
     return Index{}, nil
   }
-  fmt.Printf("Fetched submission for %s (%s)\n", submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId)
+  seriesId := submission.FormData.GenInfo.SeriesId
+  fmt.Printf("Fetched submission for %s (seriesId=%s, etfName=%s)\n", submission.FormData.GenInfo.Name, seriesId, etfName(cik, seriesId))
 
   return populateIndexFromSingleSubmission(submission), nil
 }
