@@ -95,6 +95,9 @@ func populateIndexFromSingleSubmission(submission singleSubmission) Index {
     if component.DerivativeInfo.FutrDeriv.DerivCat == "SWP" {
       continue
     }
+    if component.DerivativeInfo.FutrDeriv.DerivCat == "FWD" {
+      continue
+    }
 
     // This should be handled by the derivative checks above, but this is kept to be defensive.
     if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
