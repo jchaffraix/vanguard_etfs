@@ -6,6 +6,9 @@ import (
   "testing"
 )
 
+const kAccessionNumber = "0001104659-25-103792"
+const kSubmissionDate = "2025-01-01"
+
 func TestPopulate(t *testing.T) {
   tt := []struct {
     name string
@@ -30,7 +33,7 @@ func TestPopulate(t *testing.T) {
       if err != nil {
         panic(fmt.Sprintf("Failed to parse XML: %s (error=%+v).\n\nDid you make a mistake in the test?", payload, err))
       }
-      index := populateIndexFromSingleSubmission(submission)
+      index := populateIndexFromSingleSubmission(submission, SubmissionInfo{kAccessionNumber, kSubmissionDate})
       if index.Name != "VANGUARD TOTAL STOCK MARKET INDEX FUND" {
         t.Errorf("Invalid index name, got=%s (submission=%+v)", index.Name, submission)
         return
@@ -39,6 +42,11 @@ func TestPopulate(t *testing.T) {
         t.Errorf("Invalid SeriesId, got=%s (submission=%+v)", index.SeriesId, submission)
         return
       }
+      if index.FilingDate != kSubmissionDate {
+        t.Errorf("Invalid filingDate, got=%s (submission=%+v)", index.FilingDate, submission)
+        return
+      }
+
       if len(index.Components) != 1 {
         t.Errorf("Expect 1 components but got %d (full_payload=%+v)", len(index.Components), index)
         return
@@ -105,13 +113,17 @@ func TestPopulateIgnore(t *testing.T) {
       if err != nil {
         panic(fmt.Sprintf("Failed to parse XML: %s (error=%+v).\n\nDid you make a mistake in the test?", payload, err))
       }
-      index := populateIndexFromSingleSubmission(submission)
+      index := populateIndexFromSingleSubmission(submission, SubmissionInfo{kAccessionNumber, kSubmissionDate})
       if index.Name != "VANGUARD TOTAL STOCK MARKET INDEX FUND" {
         t.Errorf("Invalid index name, got=%s", index.Name)
         return
       }
       if index.SeriesId != "S000002848" {
         t.Errorf("Invalid SeriesId, got=%s", index.SeriesId)
+        return
+      }
+      if index.FilingDate != kSubmissionDate {
+        t.Errorf("Invalid filingDate, got=%s (submission=%+v)", index.FilingDate, submission)
         return
       }
       if len(index.Components) != 0 {

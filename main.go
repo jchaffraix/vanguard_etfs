@@ -67,13 +67,13 @@ type singleSubmission struct {
 }
 
 type IndexComponent struct {
-  Name string
+  Name string `json:"name"`
   // Only one of the 3 next field may be present.
   // Use IndexComponent.Id() if you want the unique identifier.
-  Cusip string
-  Ticker string
-  OtherId string
-  Weight float32
+  Cusip string `json:"cusip"`
+  Ticker string `json:"ticker"`
+  OtherId string `json:"other_id"`
+  Weight float32 `json:"weight"`
 }
 
 const kMissingId = "<no_id>"
@@ -92,14 +92,15 @@ func (c IndexComponent) Id() string {
 
 
 type Index struct {
-  Name string
-  SeriesId string
+  Name string `json:"name"`
+  SeriesId string `json:"series_id"`
+  FilingDate string `json:"filing_date"`
   // Note: The components may add up to more than 100%.
   Components []IndexComponent
 }
 
-func populateIndexFromSingleSubmission(submission singleSubmission) Index {
-  index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, []IndexComponent{}}
+func populateIndexFromSingleSubmission(submission singleSubmission, info SubmissionInfo) Index {
+  index := Index{submission.FormData.GenInfo.Name, submission.FormData.GenInfo.SeriesId, info.FilingDate, []IndexComponent{}}
   for _, component := range submission.FormData.InvstOrSecs.InvstOrSec {
     // Ignore any derivative.
     if component.DerivativeInfo.FutrDeriv.DerivCat != "" {
@@ -137,9 +138,9 @@ func populateIndexFromSingleSubmission(submission singleSubmission) Index {
   return index
 }
 
-func fetchSingleSubmission(c EdgarClient, cik int, accessionNumber string) (Index, error) {
+func fetchSingleSubmission(c EdgarClient, cik int, info SubmissionInfo) (Index, error) {
   // Note: We convert companyId to int to trim the leading zero that are not needed.
-  url := fmt.Sprintf(kUrlSingleSubmissionXml, cik, accessionNumber)
+  url := fmt.Sprintf(kUrlSingleSubmissionXml, cik, info.AccessionNumber)
   fmt.Printf("About to query %s\n", url)
 
   submission := singleSubmission{}
@@ -150,7 +151,7 @@ func fetchSingleSubmission(c EdgarClient, cik int, accessionNumber string) (Inde
   seriesId := submission.FormData.GenInfo.SeriesId
   fmt.Printf("Fetched submission for %s (seriesId=%s, etfName=%s)\n", submission.FormData.GenInfo.Name, seriesId, etfName(cik, seriesId))
 
-  return populateIndexFromSingleSubmission(submission), nil
+  return populateIndexFromSingleSubmission(submission, info), nil
 }
 
 type AllSubmissions struct {
@@ -169,14 +170,19 @@ func joinAccessionNumbers(an string) string {
   return strings.Join(strings.Split(an, "-"), "")
 }
 
-func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]string, error) {
+type SubmissionInfo struct {
+  AccessionNumber string
+  FilingDate string
+}
+
+func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]SubmissionInfo, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
   fmt.Printf("About to query %s\n", url)
 
   v := AllSubmissions{}
   err := c.GetJson(url, &v)
   if err != nil {
-    return []string{}, nil
+    return []SubmissionInfo{}, nil
   }
   fmt.Printf("all submissions for %+v\n", v)
 
@@ -184,21 +190,21 @@ func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]string, error) {
   // TODO: We should just return all the NPORT-P and build the entire data rather than the newest filings.
   // First we want to find the newest filing date.
   newestFilingDate := "1999-12-31"
-  allAccessionNumbers := map[string] []string{}
+  allSubmissions := map[string] []SubmissionInfo{}
   for i, filingDate := range recent.FilingDate {
     // TODO: Should we also handle NPORT-EX too?
     if recent.Form[i] == "NPORT-P" {
       if strings.Compare(filingDate, newestFilingDate) > 0 {
         newestFilingDate = filingDate
       }
-      accessionNumbers, _ := allAccessionNumbers[filingDate]
-      accessionNumbers = append(accessionNumbers, joinAccessionNumbers(recent.AccessionNumber[i]))
-      allAccessionNumbers[filingDate] = accessionNumbers
+      submissionInfos, _ := allSubmissions[filingDate]
+      submissionInfos = append(submissionInfos, SubmissionInfo{joinAccessionNumbers(recent.AccessionNumber[i]), filingDate})
+      allSubmissions[filingDate] = submissionInfos
     }
   }
   fmt.Printf("newestFilingDate=%s\n", newestFilingDate)
-  fmt.Printf("allAccessionNumbers=%+v (allAccessionNumbers[newestFilingDate]=%+v)\n", allAccessionNumbers, allAccessionNumbers[newestFilingDate])
-  return allAccessionNumbers[newestFilingDate], nil
+  fmt.Printf("allSubmissions=%+v (allSubmissions[newestFilingDate]=%+v)\n", allSubmissions, allSubmissions[newestFilingDate])
+  return allSubmissions[newestFilingDate], nil
 }
 
 type ValidationResult struct {
@@ -336,15 +342,15 @@ func main() {
 
   indexMap := map[string]Index{}
   for _, companyId := range kCompanyIds {
-    accessionNumbers, err := fetchAllSubmissionsForCik(c, companyId)
+    submissions, err := fetchAllSubmissionsForCik(c, companyId)
     if err != nil {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
       return
     }
-    for _, accessionNumber := range accessionNumbers {
-      index, err := fetchSingleSubmission(c, companyId, accessionNumber)
+    for _, submission := range submissions {
+      index, err := fetchSingleSubmission(c, companyId, submission)
       if err != nil {
-        fmt.Printf("Error fetching/parsing single XML submission for %s, err=%+v\n", accessionNumber, err)
+        fmt.Printf("Error fetching/parsing single XML submission for %+v, err=%+v\n", submission, err)
       }
       res := validateIndex(companyId, index)
       res.dump()
