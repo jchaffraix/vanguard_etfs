@@ -278,7 +278,7 @@ func validateIndex(cik int, index Index) ValidationResult {
       knownTypes := map[string]bool {
         "isin": true,
         "ticker": true,
-        "secol": true,
+        "sedol": true,
         "faid": true,
         "cins": true,
         "vid": true,
