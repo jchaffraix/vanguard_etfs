@@ -332,7 +332,7 @@ func main() {
   if ua == "" {
     panic("No \"User-Agent\" in the environment")
   }
-  c := NewEdgarClient(ua)
+  c := NewEdgarClientWithRps(ua, 5)
 
   indexMap := map[string]Index{}
   for _, companyId := range kCompanyIds {
