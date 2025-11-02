@@ -19,6 +19,42 @@ const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%010d.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
+type invstOrSec struct {
+  Name string `xml:"name"`
+  // The percentages are reported up to E-12 so we shouldn't experience
+  // a loss of precision using float32 based on this underflow table:
+  // https://docs.oracle.com/cd/E60778_01/html/E60763/z4000ac020351.html
+  PctVal float32 `xml:"pctVal"`
+  // We don't use `xml:"cusip"` as it is N/A for international stock and `<isin>` contains it.
+  Identifiers struct {
+    // According to the specification, one of them.
+    IsIn struct {
+      Value string `xml:"value,attr"`
+    } `xml:"isin"`
+    Ticker struct {
+      Value string `xml:"value,attr"`
+    } `xml:"ticker"`
+    Other struct {
+      OtherDesc string `xml:"otherDesc,attr"`
+      Value string `xml:"value,attr"`
+    } `xml:"other"`
+  } `xml:"identifiers"`
+  DerivativeInfo struct {
+    FwdDeriv struct {
+      DerivCat string `xml:"derivCat,attr"`
+    } `xml:"fwdDeriv"`
+    FutrDeriv struct {
+      DerivCat string `xml:"derivCat,attr"`
+    } `xml:"futrDeriv"`
+    OptionSwaptionWarrantDeriv struct {
+      DerivCat string `xml:"derivCat,attr"`
+    } `xml:"optionSwaptionWarrantDeriv"`
+    OtherDeriv struct {
+      DerivCat string `xml:"derivCat,attr"`
+    } `xml:"othDeriv"`
+  } `xml:"derivativeInfo"`
+}
+
 type singleSubmission struct {
   XMLName xml.Name `xml:"edgarSubmission"`
   FormData struct {
@@ -27,69 +63,17 @@ type singleSubmission struct {
       SeriesId string `xml:"seriesId"`
     } `xml:"genInfo"`
     InvstOrSecs struct {
-      InvstOrSec []struct {
-        Name string `xml:"name"`
-        // The percentages are reported up to E-12 so we shouldn't experience
-        // a loss of precision using float32 based on this underflow table:
-        // https://docs.oracle.com/cd/E60778_01/html/E60763/z4000ac020351.html
-        PctVal float32 `xml:"pctVal"`
-        // We don't use `xml:"cusip"` as it is N/A for international stock and `<isin>` contains it.
-        Identifiers struct {
-          // According to the specification, one of them.
-          IsIn struct {
-            Value string `xml:"value,attr"`
-          } `xml:"isin"`
-          Ticker struct {
-            Value string `xml:"value,attr"`
-          } `xml:"ticker"`
-          Other struct {
-            OtherDesc string `xml:"otherDesc,attr"`
-            Value string `xml:"value,attr"`
-          } `xml:"other"`
-        } `xml:"identifiers"`
-        DerivativeInfo struct {
-          FwdDeriv struct {
-            DerivCat string `xml:"derivCat,attr"`
-          } `xml:"fwdDeriv"`
-          FutrDeriv struct {
-            DerivCat string `xml:"derivCat,attr"`
-          } `xml:"futrDeriv"`
-          OptionSwaptionWarrantDeriv struct {
-            DerivCat string `xml:"derivCat,attr"`
-          } `xml:"optionSwaptionWarrantDeriv"`
-          OtherDeriv struct {
-            DerivCat string `xml:"derivCat,attr"`
-          } `xml:"othDeriv"`
-        } `xml:"derivativeInfo"`
-      } `xml:"invstOrSec"`
+      InvstOrSec []invstOrSec  `xml:"invstOrSec"`
     } `xml:"invstOrSecs"`
   } `xml:"formData"`
 }
 
 type IndexComponent struct {
   Name string `json:"name"`
-  // Only one of the 3 next field may be present.
-  // Use IndexComponent.Id() if you want the unique identifier.
-  IsIn string `json:"isin"`
-  Ticker string `json:"ticker"`
-  OtherId string `json:"other_id"`
+  Id string `json:"id"`
+  IdType string `json:"id_type"`
   Weight float32 `json:"weight"`
 }
-
-const kMissingId = "<no_id>"
-func (c IndexComponent) Id() string {
-  if c.IsIn != "" {
-    return c.IsIn
-  }
-  if c.Ticker != "" {
-    return c.Ticker
-  }
-  if c.OtherId != "" {
-    return c.OtherId
-  }
-  return kMissingId
-}
-
 
 type Index struct {
   Name string `json:"name"`
@@ -97,6 +81,25 @@ type Index struct {
   FilingDate string `json:"filing_date"`
   // Note: The components may add up to more than 100%.
   Components []IndexComponent
+}
+
+func getIdentifier(c invstOrSec) (string, string) {
+  isin := c.Identifiers.IsIn.Value
+  if isin != "" {
+    return isin, "isin"
+  }
+  ticker := c.Identifiers.Ticker.Value
+  if ticker != "" {
+    return ticker, "ticker"
+  }
+
+  id := c.Identifiers.Other.Value
+  if id == "" {
+    panic(fmt.Sprintf("No identifier found for %+v", c))
+  }
+
+  idType := c.Identifiers.Other.OtherDesc
+  return id, strings.ToLower(idType)
 }
 
 func populateIndexFromSingleSubmission(submission singleSubmission, info SubmissionInfo) Index {
@@ -120,13 +123,10 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
     if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
       continue
     }
-    isin := component.Identifiers.IsIn.Value
-    ticker := component.Identifiers.Ticker.Value
-    other := component.Identifiers.Other.Value
-    // OtherDesc is: FAID, SEDOL, VID, CINS
-    index.Components = append(index.Components, IndexComponent{component.Name, isin, ticker, other, component.PctVal})
+    id, idType := getIdentifier(component)
+    index.Components = append(index.Components, IndexComponent{component.Name, id, idType, component.PctVal})
   }
-  // Sort by weight descending, then ISIN ascending.
+  // Sort by weight descending, then Id ascending.
   slices.SortFunc(index.Components, func (a, b IndexComponent) int {
     if a.Weight < b.Weight {
       return 1
@@ -134,7 +134,7 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
     if a.Weight > b.Weight {
       return -1
     }
-    return strings.Compare(a.IsIn, b.IsIn)
+    return strings.Compare(a.Id, b.Id)
   })
   return index
 }
@@ -267,16 +267,20 @@ func validateIndex(cik int, index Index) ValidationResult {
   }
 
   for _, component := range index.Components {
-    componentId := component.Id()
     if component.Name == "N/A" || component.Name == "" {
-      res.addError(fmt.Sprintf("ETF %s has a missing component for name=%s, id=%s", res.etfName, component.Name, componentId))
+      res.addError(fmt.Sprintf("ETF %s has a component with no name=%s, id=%s", res.etfName, component.Name, component.Id))
     }
 
-    if componentId == kMissingId {
-      res.addError(fmt.Sprintf("ETF %s has a component with no id, name=%s, id=%s", res.etfName, component.Name, componentId))
+    if component.Id == "N/A" || component.Id == "" {
+      res.addError(fmt.Sprintf("ETF %s has a component with no id, name=%s, id=%s", res.etfName, component.Name, component.Id))
     }
+
+    if component.IdType == "N/A" || component.IdType == "" {
+      res.addError(fmt.Sprintf("ETF %s has a component with no idType name=%s, id=%s", res.etfName, component.Name, component.Id))
+    }
+
     if component.Weight < 0 {
-      res.addError(fmt.Sprintf("ETF %s has a component with negative weight, name=%s, id=%s", res.etfName, component.Name, componentId))
+      res.addError(fmt.Sprintf("ETF %s has a component with negative weight, name=%s, id=%s", res.etfName, component.Name, component.Id))
     }
   }
   return res

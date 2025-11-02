@@ -18,9 +18,12 @@ func TestValidate(t *testing.T) {
   } {
     {"Validate the name of the index", Index{"", kValidSeriesId, kDate, []IndexComponent{}}, true, false},
     {"Validate that the seriesId is known", Index{"Index", kInvalidSeriesId, kDate, []IndexComponent{}}, false, true},
-    {"Validate that the component have a name ", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"N/A", "", "JPY", "", 0.0039280644}}}, true, false},
-    {"Validate that the component have at least one ID", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"Company", "", "", "", 0.0039280644}}}, true, false},
-    {"Validate that a component has a positive weight", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"BMC Medical Co Ltd","CNE100005WQ4", "", "", -0.0039280644}}}, true, false},
+    {"Validate that the component have a name ", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"N/A", "JPY", "", 0.0039280644}}}, true, false},
+    {"Validate that the component have an ID", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"Company", "", "ticker", 0.0039280644}}}, true, false},
+    {"Validate that N/A is not a valid ID", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"Company", "N/A", "ticker", 0.0039280644}}}, true, false},
+    {"Validate that the component have a valid idType", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"Company", "JPY", "", 0.0039280644}}}, true, false},
+    {"Validate that N/A is not a valid idType", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"Company", "JPY", "N/A", 0.0039280644}}}, true, false},
+    {"Validate that a component has a positive weight", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"BMC Medical Co Ltd","CNE100005WQ4", "", -0.0039280644}}}, true, false},
   }
 
   for _, tc := range tt {

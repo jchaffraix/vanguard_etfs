@@ -15,14 +15,15 @@ func TestPopulate(t *testing.T) {
     invstOrSecXml string
     expected IndexComponent
   } {
-    {"Submission with `isin` and cusip", `<invstOrSec><name>Warby Parker Inc</name><cusip>93403J106</cusip><identifiers><isin value="US93403J1060"/></identifiers><pctVal>0.003502379516</pctVal></invstOrSec>`, IndexComponent{"Warby Parker Inc", "US93403J1060", "", "", 0.003502379516}},
-    {"Submission with `other` identifier", `<invstOrSec><name>Daiichi Sankyo Co Ltd</name><cusip>N/A</cusip><identifiers><other otherDesc="FAID" value="023CVR996"/></identifiers><pctVal>0.000000000105</pctVal></invstOrSec>`, IndexComponent{"Daiichi Sankyo Co Ltd", "", "", "023CVR996", 0.000000000105}},
-    {"Submission with `ticker` identifier", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000001836174</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000001836174}},
+    {"Submission with `isin` and cusip", `<invstOrSec><name>Warby Parker Inc</name><cusip>93403J106</cusip><identifiers><isin value="US93403J1060"/></identifiers><pctVal>0.003502379516</pctVal></invstOrSec>`, IndexComponent{"Warby Parker Inc", "US93403J1060", "isin", 0.003502379516}},
+    {"Submission with other identifier (FAID)", `<invstOrSec><name>Daiichi Sankyo Co Ltd</name><cusip>N/A</cusip><identifiers><other otherDesc="FAID" value="023CVR996"/></identifiers><pctVal>0.000000000105</pctVal></invstOrSec>`, IndexComponent{"Daiichi Sankyo Co Ltd", "023CVR996", "faid", 0.000000000105}},
+    {"Submission with other identifier (SEDOL)", `<invstOrSec><name>Acer Inc</name><cusip>N/A</cusip><identifiers><other otherDesc="SEDOL" value="99X4570"/></identifiers><pctVal>0.000000000001</pctVal></invstOrSec>`, IndexComponent{"Acer Inc", "99X4570", "sedol", 0.000000000001}},
+    {"Submission with `ticker` identifier", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000001836174</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "1843576D", "ticker", 0.000001836174}},
 
     // Validates we don't underflow.
-    {"Submission with 0.000000558225 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000558225</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000000558225}},
-    {"Submission with 0.000000000987 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000000987</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000000000987}},
-    {"Submission with 0.000000000001 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000000001</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "", "1843576D", "", 0.000000000001}},
+    {"Submission with 0.000000558225 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000558225</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "1843576D", "ticker", 0.000000558225}},
+    {"Submission with 0.000000000987 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000000987</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "1843576D", "ticker", 0.000000000987}},
+    {"Submission with 0.000000000001 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000000001</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "1843576D", "ticker", 0.000000000001}},
   }
 
   for _, tc := range tt {
@@ -57,18 +58,13 @@ func TestPopulate(t *testing.T) {
         return
       }
 
-      if tc.expected.Cusip != component.Cusip {
-        t.Errorf("Mismatched cusip, expected=%s but got=%s", tc.expected.Cusip, component.Cusip)
+      if tc.expected.Id != component.Id {
+        t.Errorf("Mismatched id, expected=%s but got=%s", tc.expected.Id, component.Id)
         return
       }
 
-      if tc.expected.Ticker != component.Ticker {
-        t.Errorf("Mismatched ticker, expected=%s but got=%s", tc.expected.Ticker, component.Ticker)
-        return
-      }
-
-      if tc.expected.OtherId != component.OtherId {
-        t.Errorf("Mismatched otherId, expected=%s but got=%s", tc.expected.OtherId, component.OtherId)
+      if tc.expected.IdType != component.IdType {
+        t.Errorf("Mismatched type, expected=%s but got=%s", tc.expected.IdType, component.IdType)
         return
       }
 
