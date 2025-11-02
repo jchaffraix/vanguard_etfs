@@ -7,6 +7,7 @@ import (
   "os"
   "slices"
   "strings"
+  "time"
 )
 
 // The first entry is the CIK of the reporting company.
@@ -301,6 +302,7 @@ type IndexId struct {
 }
 
 func etfName(cik int, seriesId string) string {
+  // Note: The full list of mutual fund is listed at: https://www.sec.gov/files/company_tickers_mf.json
   kSeriesToETF := map[IndexId]string{
     // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany
     IndexId{36405, "S000002839"}: "VOO",
@@ -377,11 +379,13 @@ func main() {
 
   indexMap := map[string][]Index{}
   for _, companyId := range kCompanyIds {
-    // We need to figure out how to handle the large volumne of filings for Vanguard.
-    // In particular, a lot of the seriesId are not going to be interesting and should
-    // be filtered out.
-    // TODO: Implement this, handle merging with existing data (incremental add) and remove this cutoff.
-    cutOffDate := "2025-01-01"
+    // Vanguard has a lot of submissions, unfortunately we don't know which ones are useful
+    // before fetching them as we don't know if the submissions have an associated ETF...
+    //
+    // Fetching all the potential submissions is prohibitive so we limit by date of filing.
+    // Ideally we should replace with something better, like a per seriesId search.
+    // TODO: Figure this out and handle merging with existing data (incremental add) then remove this cutoff.
+    cutOffDate := time.Now().AddDate(/*years*/0, /*months*/-4, /*days*/0).Format(time.DateOnly)
     submissions, err := fetchAllSubmissions(c, companyId, cutOffDate)
     if err != nil {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
