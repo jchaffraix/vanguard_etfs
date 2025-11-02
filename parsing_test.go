@@ -19,6 +19,7 @@ func TestPopulate(t *testing.T) {
     {"Submission with other identifier (FAID)", `<invstOrSec><name>Daiichi Sankyo Co Ltd</name><cusip>N/A</cusip><identifiers><other otherDesc="FAID" value="023CVR996"/></identifiers><pctVal>0.000000000105</pctVal></invstOrSec>`, IndexComponent{"Daiichi Sankyo Co Ltd", "023CVR996", "faid", 0.000000000105}},
     {"Submission with other identifier (SEDOL)", `<invstOrSec><name>Acer Inc</name><cusip>N/A</cusip><identifiers><other otherDesc="SEDOL" value="99X4570"/></identifiers><pctVal>0.000000000001</pctVal></invstOrSec>`, IndexComponent{"Acer Inc", "99X4570", "sedol", 0.000000000001}},
     {"Submission with `ticker` identifier", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000001836174</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "1843576D", "ticker", 0.000001836174}},
+    {"Submission with & in name", `<invstOrSec><name>Eli Lilly &amp; Co</name><cusip>532457108</cusip><identifiers><isin value="US5324571083"/></identifiers><pctVal>1.169779921999</pctVal></invstOrSec>`, IndexComponent{"Eli Lilly & Co", "US5324571083", "isin", 1.169779921999}},
 
     // Validates we don't underflow.
     {"Submission with 0.000000558225 weight", `<invstOrSec><name>Viridian Therapeutics Inc</name><cusip>901535101</cusip><identifiers><ticker value="1843576D"/></identifiers><pctVal>0.000000558225</pctVal></invstOrSec>`, IndexComponent{"Viridian Therapeutics Inc", "1843576D", "ticker", 0.000000558225}},
