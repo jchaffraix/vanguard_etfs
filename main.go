@@ -276,7 +276,21 @@ func validateIndex(cik int, index Index) ValidationResult {
     }
 
     if component.IdType == "N/A" || component.IdType == "" {
-      res.addError(fmt.Sprintf("ETF %s has a component with no idType name=%s, id=%s", res.etfName, component.Name, component.Id))
+      res.addError(fmt.Sprintf("ETF %s has a component with no idType name=%s, id=%s, id_type=%s", res.etfName, component.Name, component.Id, component.IdType))
+    } else {
+      // Validate that we know the type. This is only a warning as it's mostly a signal for the users.
+      knownTypes := map[string]bool {
+        "isin": true,
+        "ticker": true,
+        "secol": true,
+        "faid": true,
+        "cins": true,
+        "vid": true,
+      }
+      known := knownTypes[component.IdType]
+      if !known {
+        res.addWarning(fmt.Sprintf("ETF %s has a component with an unknown idType name=%s, id=%s, id_type=%s", res.etfName, component.Name, component.Id, component.IdType))
+      }
     }
 
     if component.Weight < 0 {
