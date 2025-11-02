@@ -176,7 +176,7 @@ type SubmissionInfo struct {
   FilingDate string
 }
 
-func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]SubmissionInfo, error) {
+func fetchAllSubmissions(c EdgarClient, cik int, cutOffDate string) ([]SubmissionInfo, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
   fmt.Printf("About to query %s\n", url)
 
@@ -188,24 +188,19 @@ func fetchAllSubmissionsForCik(c EdgarClient, cik int) ([]SubmissionInfo, error)
   fmt.Printf("all submissions for %+v\n", v)
 
   recent := v.Filings.Recent
-  // TODO: We should just return all the NPORT-P and build the entire data rather than the newest filings.
-  // First we want to find the newest filing date.
-  newestFilingDate := "1999-12-31"
-  allSubmissions := map[string] []SubmissionInfo{}
+  submissionInfos := []SubmissionInfo{}
   for i, filingDate := range recent.FilingDate {
+    if strings.Compare(filingDate, cutOffDate) < -1 {
+      continue
+    }
+
     // TODO: Should we also handle NPORT-EX too?
     if recent.Form[i] == "NPORT-P" {
-      if strings.Compare(filingDate, newestFilingDate) > 0 {
-        newestFilingDate = filingDate
-      }
-      submissionInfos, _ := allSubmissions[filingDate]
       submissionInfos = append(submissionInfos, SubmissionInfo{joinAccessionNumbers(recent.AccessionNumber[i]), filingDate})
-      allSubmissions[filingDate] = submissionInfos
     }
   }
-  fmt.Printf("newestFilingDate=%s\n", newestFilingDate)
-  fmt.Printf("allSubmissions=%+v (allSubmissions[newestFilingDate]=%+v)\n", allSubmissions, allSubmissions[newestFilingDate])
-  return allSubmissions[newestFilingDate], nil
+  fmt.Printf("len(submissionInfos)=%d)\n", len(submissionInfos))
+  return submissionInfos, nil
 }
 
 type ValidationResult struct {
@@ -347,11 +342,32 @@ func etfName(cik int, seriesId string) string {
   return etfName
 }
 
+func writeToJsonFile(path string, v any) error {
+  f, err := os.OpenFile(path, os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0644)
+  if err != nil {
+    return err
+  }
+
+  bytes, err := json.Marshal(v)
+  if err != nil {
+    return err
+  }
+
+  if _, err := f.Write(bytes); err != nil {
+    f.Close() // ignore error; Write error takes precedence
+    return err
+  }
+  if err := f.Close(); err != nil {
+    return err
+  }
+  return nil
+}
+
 func main() {
   // We store the CIK for the reporting company as int as we need to
   // pad them with 0s in some cases, but not all.
   // If you add a new company's CIK here, make sure to add the new
-  // ETFs to etfName or we will ignore them.
+  // ETFs to() etfName or we will ignore them.
   kCompanyIds := []int{52848, 36405, 736054, 36405}
   ua := os.Getenv("USER_AGENT")
   if ua == "" {
@@ -359,9 +375,14 @@ func main() {
   }
   c := NewEdgarClientWithRps(ua, 5)
 
-  indexMap := map[string]Index{}
+  indexMap := map[string][]Index{}
   for _, companyId := range kCompanyIds {
-    submissions, err := fetchAllSubmissionsForCik(c, companyId)
+    // We need to figure out how to handle the large volumne of filings for Vanguard.
+    // In particular, a lot of the seriesId are not going to be interesting and should
+    // be filtered out.
+    // TODO: Implement this, handle merging with existing data (incremental add) and remove this cutoff.
+    cutOffDate := "2025-01-01"
+    submissions, err := fetchAllSubmissions(c, companyId, cutOffDate)
     if err != nil {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
       return
@@ -376,33 +397,39 @@ func main() {
       if res.etfName == "" {
         continue
       }
-      indexMap[res.etfName] = index
+      existingIndexes := indexMap[res.etfName]
+      existingIndexes = append(existingIndexes, index)
+      indexMap[res.etfName] = existingIndexes
     }
+  }
+
+  // Sort the indexes from newest to oldest.
+  for etfName, indexes := range indexMap {
+    slices.SortFunc(indexes, func (a, b Index) int {
+      return strings.Compare(a.FilingDate, b.FilingDate)
+    })
+    indexMap[etfName] = indexes
   }
 
   // TODO: Do we want to preprocess more of the data (e.g. by standardizing tickers to their name)?
   // This could be done using: https://github.com/JerBouma/FinanceDatabase/tree/main
 
-  for etfName, index := range indexMap {
-    f, err := os.OpenFile(fmt.Sprintf("./data/%s.json", etfName), os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0644)
-    if err != nil {
-      fmt.Printf("Error: opening file for %s (err=%+v)\n", etfName, err)
-      return
-    }
+  if err := os.MkdirAll("data/latest", 0755); err != nil {
+    panic("Couldn't create directory data/latest")
+  }
+  if err := os.MkdirAll("data/all", 0755); err != nil {
+    panic("Couldn't create directory data/latest")
+  }
 
-    bytes, err := json.Marshal(index)
-    if err != nil {
-      fmt.Printf("Error: marshaling index for %s (err=%+v, index=%+v)\n", etfName, err, index)
+  for etfName, indexes := range indexMap {
+    allFilePath := fmt.Sprintf("./data/all/%s.json", etfName)
+    if err := writeToJsonFile(allFilePath, indexes); err != nil {
+      fmt.Printf("Error: writing to file %s (err=%+v)\n", allFilePath, err)
       return
     }
-
-    if _, err := f.Write(bytes); err != nil {
-      f.Close() // ignore error; Write error takes precedence
-      fmt.Printf("Error: writing to JSON file for %s (err=%+v)\n", etfName, err)
-      return
-    }
-    if err := f.Close(); err != nil {
-      fmt.Printf("Error: closing file for %s (err=%+v)\n", etfName, err)
+    latestFilePath := fmt.Sprintf("./data/latest/%s.json", etfName)
+    if err := writeToJsonFile(latestFilePath, indexes[0]); err != nil {
+      fmt.Printf("Error: writing to file %s (err=%+v)\n", allFilePath, err)
       return
     }
   }
