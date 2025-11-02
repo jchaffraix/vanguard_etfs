@@ -70,7 +70,7 @@ type IndexComponent struct {
   Name string `json:"name"`
   // Only one of the 3 next field may be present.
   // Use IndexComponent.Id() if you want the unique identifier.
-  Cusip string `json:"cusip"`
+  IsIn string `json:"isin"`
   Ticker string `json:"ticker"`
   OtherId string `json:"other_id"`
   Weight float32 `json:"weight"`
@@ -78,8 +78,8 @@ type IndexComponent struct {
 
 const kMissingId = "<no_id>"
 func (c IndexComponent) Id() string {
-  if c.Cusip != "" {
-    return c.Cusip
+  if c.IsIn != "" {
+    return c.IsIn
   }
   if c.Ticker != "" {
     return c.Ticker
@@ -120,12 +120,13 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
     if component.Identifiers.Other.OtherDesc == "CONTRACT_VANGUARD_ID" {
       continue
     }
-    cusip := component.Identifiers.IsIn.Value
+    isin := component.Identifiers.IsIn.Value
     ticker := component.Identifiers.Ticker.Value
     other := component.Identifiers.Other.Value
-    index.Components = append(index.Components, IndexComponent{component.Name, cusip, ticker, other, component.PctVal})
+    // OtherDesc is: FAID, SEDOL, VID, CINS
+    index.Components = append(index.Components, IndexComponent{component.Name, isin, ticker, other, component.PctVal})
   }
-  // Sort by weight descending, then CUSIP ascending.
+  // Sort by weight descending, then ISIN ascending.
   slices.SortFunc(index.Components, func (a, b IndexComponent) int {
     if a.Weight < b.Weight {
       return 1
@@ -133,7 +134,7 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
     if a.Weight > b.Weight {
       return -1
     }
-    return strings.Compare(a.Cusip, b.Cusip)
+    return strings.Compare(a.IsIn, b.IsIn)
   })
   return index
 }
