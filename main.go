@@ -140,9 +140,9 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
   return index
 }
 
-func fetchSingleSubmission(c EdgarClient, cik int, info SubmissionInfo) (Index, error) {
+func fetchSingleSubmission(c EdgarClient, info SubmissionInfo) (Index, error) {
   // Note: We convert companyId to int to trim the leading zero that are not needed.
-  url := fmt.Sprintf(kUrlSingleSubmissionXml, cik, info.AccessionNumber)
+  url := fmt.Sprintf(kUrlSingleSubmissionXml, info.Cik, info.AccessionNumber)
   fmt.Printf("About to query %s\n", url)
 
   submission := singleSubmission{}
@@ -151,7 +151,7 @@ func fetchSingleSubmission(c EdgarClient, cik int, info SubmissionInfo) (Index, 
     return Index{}, nil
   }
   seriesId := submission.FormData.GenInfo.SeriesId
-  fmt.Printf("Fetched submission for %s (seriesId=%s, etfName=%s)\n", submission.FormData.GenInfo.Name, seriesId, etfName(cik, seriesId))
+  fmt.Printf("Fetched submission for %s (seriesId=%s, etfName=%s)\n", submission.FormData.GenInfo.Name, seriesId, etfName(info.Cik, seriesId))
 
   return populateIndexFromSingleSubmission(submission, info), nil
 }
@@ -173,6 +173,7 @@ func joinAccessionNumbers(an string) string {
 }
 
 type SubmissionInfo struct {
+  Cik int
   AccessionNumber string
   FilingDate string
 }
@@ -197,7 +198,7 @@ func fetchAllSubmissions(c EdgarClient, cik int, cutOffDate string) ([]Submissio
 
     // TODO: Should we also handle NPORT-EX too?
     if recent.Form[i] == "NPORT-P" {
-      submissionInfos = append(submissionInfos, SubmissionInfo{joinAccessionNumbers(recent.AccessionNumber[i]), filingDate})
+      submissionInfos = append(submissionInfos, SubmissionInfo{cik, joinAccessionNumbers(recent.AccessionNumber[i]), filingDate})
     }
   }
   fmt.Printf("len(submissionInfos)=%d)\n", len(submissionInfos))
@@ -392,7 +393,7 @@ func main() {
       return
     }
     for _, submission := range submissions {
-      index, err := fetchSingleSubmission(c, companyId, submission)
+      index, err := fetchSingleSubmission(c, submission)
       if err != nil {
         fmt.Printf("Error fetching/parsing single XML submission for %+v, err=%+v\n", submission, err)
       }

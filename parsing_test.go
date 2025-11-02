@@ -6,6 +6,7 @@ import (
   "testing"
 )
 
+const kCik = 36405
 const kAccessionNumber = "0001104659-25-103792"
 const kSubmissionDate = "2025-01-01"
 
@@ -35,7 +36,7 @@ func TestPopulate(t *testing.T) {
       if err != nil {
         panic(fmt.Sprintf("Failed to parse XML: %s (error=%+v).\n\nDid you make a mistake in the test?", payload, err))
       }
-      index := populateIndexFromSingleSubmission(submission, SubmissionInfo{kAccessionNumber, kSubmissionDate})
+      index := populateIndexFromSingleSubmission(submission, SubmissionInfo{kCik, kAccessionNumber, kSubmissionDate})
       if index.Name != "VANGUARD TOTAL STOCK MARKET INDEX FUND" {
         t.Errorf("Invalid index name, got=%s (submission=%+v)", index.Name, submission)
         return
@@ -110,7 +111,7 @@ func TestPopulateIgnore(t *testing.T) {
       if err != nil {
         panic(fmt.Sprintf("Failed to parse XML: %s (error=%+v).\n\nDid you make a mistake in the test?", payload, err))
       }
-      index := populateIndexFromSingleSubmission(submission, SubmissionInfo{kAccessionNumber, kSubmissionDate})
+      index := populateIndexFromSingleSubmission(submission, SubmissionInfo{kCik, kAccessionNumber, kSubmissionDate})
       if index.Name != "VANGUARD TOTAL STOCK MARKET INDEX FUND" {
         t.Errorf("Invalid index name, got=%s", index.Name)
         return
