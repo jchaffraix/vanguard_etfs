@@ -7,7 +7,6 @@ import (
   "os"
   "slices"
   "strings"
-  "time"
 )
 
 // The first entry is the CIK of the reporting company.
@@ -22,6 +21,8 @@ const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%010d.json"
 // of securities or else the IP is banned for 10 mins.
 // This limit is somewhat conservative.
 const kMaxSubmissionsToFetch = 50
+
+const kFetchedMapFile = "./data/fetched_map.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
@@ -189,7 +190,7 @@ type SubmissionInfo struct {
   FilingDate string
 }
 
-func fetchAllSubmissions(c EdgarClient, cik int, cutOffDate string) ([]SubmissionInfo, error) {
+func fetchAllSubmissions(c EdgarClient, cik int) ([]SubmissionInfo, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
   fmt.Printf("About to query %s\n", url)
 
@@ -203,17 +204,15 @@ func fetchAllSubmissions(c EdgarClient, cik int, cutOffDate string) ([]Submissio
   recent := v.Filings.Recent
   submissionInfos := []SubmissionInfo{}
   for i, filingDate := range recent.FilingDate {
-    if strings.Compare(filingDate, cutOffDate) < -1 {
-      continue
-    }
-
     // TODO: Should we also handle NPORT-EX too?
     if recent.Form[i] == "NPORT-P" {
       submissionInfos = append(submissionInfos, SubmissionInfo{cik, joinAccessionNumbers(recent.AccessionNumber[i]), filingDate})
     }
   }
+  // Sort submissions from newest to oldest.
   slices.SortFunc(submissionInfos, func (a, b SubmissionInfo) int {
-    return strings.Compare(a.FilingDate, b.FilingDate)
+    // a and b are flipped to get the newest to oldest behavior.
+    return strings.Compare(b.FilingDate, a.FilingDate)
   })
   return submissionInfos, nil
 }
@@ -316,6 +315,18 @@ type IndexId struct {
   SeriesId string
 }
 
+func etfs(cik int) []string {
+  kCikToETFs := map[int][]string{
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany
+    36405: []string{"VOO", "VTV", "VXF", "VUG", "VV", "VO", "VB", "VBK", "VBR", "VTI", "VOT", "VOE"},
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000736054&action=getcompany
+    736054: []string{"VXUS"},
+    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000052848&action=getcompany
+    52848: []string{"VAW", "VOX", "VPU", "VCR", "VDC", "VDE", "VFH", "VHT", "VIS", "VGT", "EDV", "MGC", "MGV", "MGK", "VSGX", "ESGV", "VCEB", "VEXC"},
+  }
+  return kCikToETFs[cik]
+}
+
 func etfName(cik int, seriesId string) string {
   // Note: The full list of mutual fund is listed at: https://www.sec.gov/files/company_tickers_mf.json
   kSeriesToETF := map[IndexId]string{
@@ -359,6 +370,21 @@ func etfName(cik int, seriesId string) string {
   return etfName
 }
 
+func readFetchedDate() FetchedDatesMap {
+  f, err := os.Open(kFetchedMapFile)
+  if err != nil {
+    panic(fmt.Sprintf("Couldn't open date file, err=%+v", err))
+  }
+
+  v := FetchedDatesMap{}
+  decoder := json.NewDecoder(f)
+  err = decoder.Decode(&v)
+  if err != nil {
+    panic(fmt.Sprintf("Couldn't JSON decode the fetched date file, err=%+v", err))
+  }
+  return v
+}
+
 func writeToJsonFile(path string, v any) error {
   f, err := os.OpenFile(path, os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0644)
   if err != nil {
@@ -380,32 +406,113 @@ func writeToJsonFile(path string, v any) error {
   return nil
 }
 
+type FetchedDatesMap map[int] FilingDateSpan
+type FilingDateSpan struct {
+  // Both ends are inclusive so this represents the span: [Start, End]
+  // If both are "", it's the empty span.
+  Start string `json:"start"`
+  End string `json:"end"`
+}
+
+func (f FilingDateSpan) isEmpty() bool {
+  return f.Start == "" || f.End == ""
+}
+
+func (f FilingDateSpan) spans(date string) bool {
+  return strings.Compare(date, f.Start) >= 0 && strings.Compare(date, f.End) <= 0
+}
+
+func (f *FilingDateSpan) update(start, end string) {
+  if strings.Compare(start, end) > 0 {
+    tmp := end
+    end = start
+    start = tmp
+  }
+
+  if f.Start == "" || strings.Compare(start, f.Start) < 0 {
+    f.Start = start
+  }
+  if f.End == "" || strings.Compare(end, f.End) > 0 {
+    f.End = end
+  }
+}
+
+func filterFilingDates(infos []SubmissionInfo, fetchedDates FilingDateSpan) []SubmissionInfo {
+  if fetchedDates.isEmpty() {
+    return infos
+  }
+
+  res := []SubmissionInfo{}
+  for _, info := range infos {
+    if fetchedDates.spans(info.FilingDate) {
+      continue
+    }
+    res = append(res, info)
+  }
+  return res
+}
+
+func buildIndexMap(cik int, fetchedDates FilingDateSpan) map[string][]Index {
+  indexMap := map[string][]Index{}
+  // Ignore existing files if we don't have any fetched information.
+  if fetchedDates.isEmpty() {
+    return indexMap
+  }
+  etfs := etfs(cik)
+  for _, etf := range etfs {
+    allFilePath := fmt.Sprintf("./data/all/%s.json", etf)
+    f, err := os.Open(allFilePath)
+    if err != nil {
+      panic(fmt.Sprintf("Error opening file for %s, err=%+v", etf, err))
+    }
+
+    v := []Index{}
+    decoder := json.NewDecoder(f)
+    err = decoder.Decode(&v)
+    if err != nil {
+      panic(fmt.Sprintf("Couldn't JSON decode the file for %s, err=%+v", etf, err))
+    }
+  }
+
+  return indexMap
+}
+
 func main() {
-  // We store the CIK for the reporting company as int as we need to
-  // pad them with 0s in some cases, but not all.
-  // If you add a new company's CIK here, make sure to add the new
-  // ETFs to() etfName or we will ignore them.
-  kCompanyIds := []int{52848, 36405, 736054, 36405}
+  // Ensure that the output directories are present before fetching.
+  if err := os.MkdirAll("data/latest", 0755); err != nil {
+    panic("Couldn't create directory data/latest")
+  }
+  if err := os.MkdirAll("data/all", 0755); err != nil {
+    panic("Couldn't create directory data/latest")
+  }
+  fetchedDateMap := readFetchedDate()
+  fmt.Printf("FetchedMap: %+v\n", fetchedDateMap)
+
   ua := os.Getenv("USER_AGENT")
   if ua == "" {
     panic("No \"$USER_AGENT\" in the environment")
   }
   c := NewEdgarClientWithRps(ua, 5)
 
-  indexMap := map[string][]Index{}
+  // We store the CIK for the reporting company as int as we need to
+  // pad them with 0s in some cases, but not all.
+  // If you add a new company's CIK here, make sure to add the new
+  // ETFs to() etfName or we will ignore them.
+  kCompanyIds := []int{52848, 36405, 736054, 36405}
   for _, companyId := range kCompanyIds {
+    fetchedDates := fetchedDateMap[companyId]
+    indexMap := buildIndexMap(companyId, fetchedDates)
     // Vanguard has a lot of submissions, unfortunately we don't know which ones are useful
     // before fetching them as we don't know if the submissions have an associated ETF...
     //
-    // Fetching all the potential submissions is prohibitive so we limit by date of filing.
-    // Ideally we should replace with something better, like a per seriesId search.
-    // TODO: Figure this out and handle merging with existing data (incremental add) then remove this cutoff.
-    cutOffDate := time.Now().AddDate(/*years*/0, /*months*/-4, /*days*/0).Format(time.DateOnly)
-    submissions, err := fetchAllSubmissions(c, companyId, cutOffDate)
+    // Fetching all the potential submissions is prohibitive so we have a hard limit.
+    // Ideally we should replace with something better, like a per-seriesId search.
+    submissions, err := fetchAllSubmissions(c, companyId)
     if err != nil {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
       return
     }
+    submissions = filterFilingDates(submissions, fetchedDates)
     if len(submissions) > kMaxSubmissionsToFetch {
       fmt.Printf("Too many submissions to fetch: %d (limit %d). Finding a suitable boundary.\n", len(submissions), kMaxSubmissionsToFetch)
       maxSubmissionIdx := -1
@@ -420,6 +527,7 @@ func main() {
       submissions = submissions[0:maxSubmissionIdx]
       fmt.Printf("Will fetch: %d (limit %d), filingDate in [%s,%s].\n", len(submissions), kMaxSubmissionsToFetch, submissions[0].FilingDate, submissions[len(submissions) - 1].FilingDate)
     }
+    // TODO: Add a debugging mode as this is verbose: fmt.Printf("submissions to fetch = %+v", submissions)
 
     for _, submission := range submissions {
       index, err := fetchSingleSubmission(c, submission)
@@ -435,36 +543,34 @@ func main() {
       existingIndexes = append(existingIndexes, index)
       indexMap[res.etfName] = existingIndexes
     }
-  }
 
-  // Sort the indexes from newest to oldest.
-  for etfName, indexes := range indexMap {
-    slices.SortFunc(indexes, func (a, b Index) int {
-      return strings.Compare(a.FilingDate, b.FilingDate)
-    })
-    indexMap[etfName] = indexes
-  }
-
-  // TODO: Do we want to preprocess more of the data (e.g. by standardizing tickers to their name)?
-  // This could be done using: https://github.com/JerBouma/FinanceDatabase/tree/main
-
-  if err := os.MkdirAll("data/latest", 0755); err != nil {
-    panic("Couldn't create directory data/latest")
-  }
-  if err := os.MkdirAll("data/all", 0755); err != nil {
-    panic("Couldn't create directory data/latest")
-  }
-
-  for etfName, indexes := range indexMap {
-    allFilePath := fmt.Sprintf("./data/all/%s.json", etfName)
-    if err := writeToJsonFile(allFilePath, indexes); err != nil {
-      fmt.Printf("Error: writing to file %s (err=%+v)\n", allFilePath, err)
-      return
+    // Sort the indexes from newest to oldest.
+    for etfName, indexes := range indexMap {
+      slices.SortFunc(indexes, func (a, b Index) int {
+        // a and b are flipped to get the newest to oldest behavior.
+        return strings.Compare(b.FilingDate, a.FilingDate)
+      })
+      indexMap[etfName] = indexes
     }
-    latestFilePath := fmt.Sprintf("./data/latest/%s.json", etfName)
-    if err := writeToJsonFile(latestFilePath, indexes[0]); err != nil {
-      fmt.Printf("Error: writing to file %s (err=%+v)\n", allFilePath, err)
-      return
+
+    // TODO: Do we want to preprocess more of the data (e.g. by standardizing tickers to their name)?
+    // This could be done using: https://github.com/JerBouma/FinanceDatabase/tree/main
+
+    for etfName, indexes := range indexMap {
+      allFilePath := fmt.Sprintf("./data/all/%s.json", etfName)
+      if err := writeToJsonFile(allFilePath, indexes); err != nil {
+        fmt.Printf("Error: writing to file %s (err=%+v)\n", allFilePath, err)
+        return
+      }
+      latestFilePath := fmt.Sprintf("./data/latest/%s.json", etfName)
+      if err := writeToJsonFile(latestFilePath, indexes[0]); err != nil {
+        fmt.Printf("Error: writing to file %s (err=%+v)\n", allFilePath, err)
+        return
+      }
     }
+    // Update the fetched dates now that we've succeeded for this company.
+    fetchedDates.update(submissions[0].FilingDate, submissions[len(submissions) - 1].FilingDate)
+    fetchedDateMap[companyId] = fetchedDates
+    writeToJsonFile(kFetchedMapFile, fetchedDateMap)
   }
 }
