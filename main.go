@@ -388,7 +388,7 @@ func main() {
   kCompanyIds := []int{52848, 36405, 736054, 36405}
   ua := os.Getenv("USER_AGENT")
   if ua == "" {
-    panic("No \"User-Agent\" in the environment")
+    panic("No \"$USER_AGENT\" in the environment")
   }
   c := NewEdgarClientWithRps(ua, 5)
 
