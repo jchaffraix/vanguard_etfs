@@ -21,7 +21,7 @@ const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%010d.json"
 // The throttling in EdgarClient is not enough, we can only fetch a small amount
 // of securities or else the IP is banned for 10 mins.
 // This limit is somewhat conservative.
-const kMaxSubmissionsToFetch = 70
+const kMaxSubmissionsToFetch = 50
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
