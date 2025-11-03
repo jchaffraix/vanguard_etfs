@@ -3,6 +3,8 @@ package main
 import (
   "encoding/xml"
   "encoding/json"
+  "errors"
+  "fmt"
   "net/http"
   "time"
 )
@@ -70,6 +72,9 @@ func (c EdgarClient) GetResp(url string) (*http.Response, error) {
 
   resp, err := c.client.Do(req)
   c.timer = time.NewTimer(c.throttleDuration)
+  if resp.StatusCode != 200 {
+    return nil, errors.New(fmt.Sprintf("Non-2xx answer: %d", resp.StatusCode))
+  }
   return resp, err
 }
 
