@@ -16,6 +16,10 @@ func TestValidate(t *testing.T) {
     hasError bool
     hasWarning bool
   } {
+    // Valid.
+    {"Validate that cusip is known", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"Advaxis Inc", "007624125", "cusip", 0.000000000181}}}, false, false},
+
+    // Invalid.
     {"Validate the name of the index", Index{"", kValidSeriesId, kDate, []IndexComponent{}}, true, false},
     {"Validate that the seriesId is known", Index{"Index", kInvalidSeriesId, kDate, []IndexComponent{}}, false, true},
     {"Validate that the component have a name ", Index{"Index", kValidSeriesId, kDate, []IndexComponent{IndexComponent{"N/A", "JPY", "", 0.0039280644}}}, true, false},

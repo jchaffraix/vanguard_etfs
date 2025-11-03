@@ -295,6 +295,7 @@ func validateIndex(cik int, index Index) ValidationResult {
         "sedol": true,
         "faid": true,
         "cins": true,
+        "cusip": true,
         "vid": true,
       }
       known := knownTypes[component.IdType]
