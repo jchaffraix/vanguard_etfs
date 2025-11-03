@@ -18,6 +18,11 @@ const kUrlSingleSubmissionXml = "https://www.sec.gov/Archives/edgar/data/%d/%s/p
 // to 10 digits (per EDGAR's format).
 const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%010d.json"
 
+// The throttling in EdgarClient is not enough, we can only fetch a small amount
+// of securities or else the IP is banned for 10 mins.
+// This limit is somewhat conservative.
+const kMaxSubmissionsToFetch = 70
+
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
 type invstOrSec struct {
@@ -187,7 +192,7 @@ func fetchAllSubmissions(c EdgarClient, cik int, cutOffDate string) ([]Submissio
   if err != nil {
     return []SubmissionInfo{}, nil
   }
-  fmt.Printf("all submissions for %+v\n", v)
+  // TODO: Add some debugging mode as this is verbose: fmt.Printf("all submissions for %+v\n", v)
 
   recent := v.Filings.Recent
   submissionInfos := []SubmissionInfo{}
@@ -201,7 +206,9 @@ func fetchAllSubmissions(c EdgarClient, cik int, cutOffDate string) ([]Submissio
       submissionInfos = append(submissionInfos, SubmissionInfo{cik, joinAccessionNumbers(recent.AccessionNumber[i]), filingDate})
     }
   }
-  fmt.Printf("len(submissionInfos)=%d)\n", len(submissionInfos))
+  slices.SortFunc(submissionInfos, func (a, b SubmissionInfo) int {
+    return strings.Compare(a.FilingDate, b.FilingDate)
+  })
   return submissionInfos, nil
 }
 
@@ -392,6 +399,21 @@ func main() {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
       return
     }
+    if len(submissions) > kMaxSubmissionsToFetch {
+      fmt.Printf("Too many submissions to fetch: %d (limit %d). Finding a suitable boundary.\n", len(submissions), kMaxSubmissionsToFetch)
+      maxSubmissionIdx := -1
+      for i := 1; i <= kMaxSubmissionsToFetch; i++ {
+        if submissions[i - 1].FilingDate != submissions[i].FilingDate {
+          maxSubmissionIdx = i
+        }
+      }
+      if maxSubmissionIdx == -1 {
+        panic("No filingDate boundary found in data")
+      }
+      submissions = submissions[0:maxSubmissionIdx]
+      fmt.Printf("Will fetch: %d (limit %d), filingDate in [%s,%s].\n", len(submissions), kMaxSubmissionsToFetch, submissions[0].FilingDate, submissions[len(submissions) - 1].FilingDate)
+    }
+
     for _, submission := range submissions {
       index, err := fetchSingleSubmission(c, submission)
       if err != nil {
