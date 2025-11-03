@@ -504,21 +504,24 @@ func main() {
   // pad them with 0s in some cases, but not all.
   // If you add a new company's CIK here, make sure to add the new
   // ETFs to() etfName or we will ignore them.
-  kCompanyIds := []int{52848, 36405, 736054, 36405}
-  for _, companyId := range kCompanyIds {
-    fetchedDates := fetchedDateMap[companyId]
-    indexMap := buildIndexMap(companyId, fetchedDates)
+  kCompanyIds := []int{52848, 36405, 736054}
+  for _, cik := range kCompanyIds {
+    fetchedDates := fetchedDateMap[cik]
+    indexMap := buildIndexMap(cik, fetchedDates)
     // Vanguard has a lot of submissions, unfortunately we don't know which ones are useful
     // before fetching them as we don't know if the submissions have an associated ETF...
     //
     // Fetching all the potential submissions is prohibitive so we have a hard limit.
     // Ideally we should replace with something better, like a per-seriesId search.
-    submissions, err := fetchAllSubmissions(c, companyId)
+    submissions, err := fetchAllSubmissions(c, cik)
     if err != nil {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
       return
     }
     submissions = filterFilingDates(submissions, fetchedDates)
+    if len(submissions) == 0 {
+      fmt.Printf("Nothing to fetch for cik=%d. Skipping to the next CIK\n", cik)
+    }
     if len(submissions) > kMaxSubmissionsToFetch {
       fmt.Printf("Too many submissions to fetch: %d (limit %d). Finding a suitable boundary.\n", len(submissions), kMaxSubmissionsToFetch)
       maxSubmissionIdx := -1
@@ -540,7 +543,7 @@ func main() {
       if err != nil {
         fmt.Printf("Error fetching/parsing single XML submission for %+v, err=%+v\n", submission, err)
       }
-      res := validateIndex(companyId, index)
+      res := validateIndex(cik, index)
       res.dump()
       if res.etfName == "" {
         continue
@@ -576,7 +579,7 @@ func main() {
     }
     // Update the fetched dates now that we've succeeded for this company.
     fetchedDates.update(submissions[0].FilingDate, submissions[len(submissions) - 1].FilingDate)
-    fetchedDateMap[companyId] = fetchedDates
+    fetchedDateMap[cik] = fetchedDates
     writeToJsonFile(kFetchedMapFile, fetchedDateMap)
   }
 }
