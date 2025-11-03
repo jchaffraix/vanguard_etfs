@@ -477,6 +477,7 @@ func buildIndexMap(cik int, fetchedDates FilingDateSpan) map[string][]Index {
     if err != nil {
       panic(fmt.Sprintf("Couldn't JSON decode the file for %s, err=%+v", etf, err))
     }
+    indexMap[etf] = v
   }
 
   return indexMap
