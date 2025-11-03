@@ -52,6 +52,9 @@ type invstOrSec struct {
     FutrDeriv struct {
       DerivCat string `xml:"derivCat,attr"`
     } `xml:"futrDeriv"`
+    SwapDeriv struct {
+      DerivCat string `xml:"derivCat,attr"`
+    } `xml:"swapDeriv"`
     OptionSwaptionWarrantDeriv struct {
       DerivCat string `xml:"derivCat,attr"`
     } `xml:"optionSwaptionWarrantDeriv"`
@@ -116,6 +119,9 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
       continue
     }
     if component.DerivativeInfo.FwdDeriv.DerivCat != "" {
+      continue
+    }
+    if component.DerivativeInfo.SwapDeriv.DerivCat != "" {
       continue
     }
     if component.DerivativeInfo.OptionSwaptionWarrantDeriv.DerivCat != "" {

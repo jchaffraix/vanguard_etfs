@@ -83,7 +83,8 @@ func TestPopulateIgnore(t *testing.T) {
     name string
     invstOrSecXml string
   } {
-    {"Ignore Swap", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><other otherDesc="CONTRACT_VANGUARD_ID" value="V1047133201"/></identifiers><pctVal>-0.003502379516</pctVal><derivativeInfo><swapDeriv derivCat="SWP"></swapDeriv></derivativeInfo></invstOrSec>`},
+    {"Ignore Swap with CONTRACT_VANGUARD_ID", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><other otherDesc="CONTRACT_VANGUARD_ID" value="V1047133201"/></identifiers><pctVal>-0.003502379516</pctVal><derivativeInfo><swapDeriv derivCat="SWP"></swapDeriv></derivativeInfo></invstOrSec>`},
+    {"Ignore Swap without CONTRACT_VANGUARD_ID", `<invstOrSec><name>RECV W RECEIVE</name><cusip>N/A</cusip><identifiers><other otherDesc="SECURITY NUMBER" value="W00000002"/></identifiers><pctVal>-0.003502379516</pctVal><derivativeInfo><swapDeriv derivCat="SWP"></swapDeriv></derivativeInfo></invstOrSec>`},
     {"Ignore Future", `<invstOrSec><name>N/A</name><cusip>N/A</cusip><identifiers><ticker value="RTYU5"/></identifiers><pctVal>0.000674480486</pctVal><derivativeInfo><futrDeriv derivCat="FUT"></futrDeriv></derivativeInfo></invstOrSec>`},
     {"Ignore Forward Rate on futrDeriv (invalid)", `<invstOrSec><name>JPY/USD FWD 20250917</name><cusip>N/A</cusip><identifiers><ticker value="JPY"/></identifiers><pctVal>0.000674480486</pctVal><derivativeInfo><futrDeriv derivCat="FWD"></futrDeriv></derivativeInfo></invstOrSec>`},
     {"Ignore Forward Rate on fwdDeriv", `<invstOrSec>
