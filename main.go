@@ -463,6 +463,11 @@ func buildIndexMap(cik int, fetchedDates FilingDateSpan) map[string][]Index {
     allFilePath := fmt.Sprintf("./data/all/%s.json", etf)
     f, err := os.Open(allFilePath)
     if err != nil {
+      if etf == "VEXC" {
+        // This is a new index as of 2025-09-01 so ignore a missing file.
+        // TODO: Remove this check in 2026.
+        continue
+      }
       panic(fmt.Sprintf("Error opening file for %s, err=%+v", etf, err))
     }
 
