@@ -521,7 +521,9 @@ func main() {
     submissions = filterFilingDates(submissions, fetchedDates)
     if len(submissions) == 0 {
       fmt.Printf("Nothing to fetch for cik=%d. Skipping to the next CIK\n", cik)
+      continue
     }
+
     if len(submissions) > kMaxSubmissionsToFetch {
       fmt.Printf("Too many submissions to fetch: %d (limit %d). Finding a suitable boundary.\n", len(submissions), kMaxSubmissionsToFetch)
       maxSubmissionIdx := -1
