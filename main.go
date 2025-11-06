@@ -19,6 +19,7 @@ const kUrlSingleSubmissionXml = "https://www.sec.gov/Archives/edgar/data/%d/%s/p
 const kUrlAllSubmissionsJson = "https://data.sec.gov/submissions/CIK%010d.json"
 
 const kFetchedMapFile = "./data/fetched_map.json"
+const kStoredIndexFile = "./all_etfs.json"
 
 // Subset of:
 // https://www.sec.gov/info/edgar/specifications/form-n-port-xml-tech-specs.htm
@@ -311,58 +312,39 @@ type IndexId struct {
   SeriesId string
 }
 
-func etfs(cik int) []string {
-  kCikToETFs := map[int][]string{
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany
-    36405: []string{"VOO", "VTV", "VXF", "VUG", "VV", "VO", "VB", "VBK", "VBR", "VTI", "VOT", "VOE"},
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000736054&action=getcompany
-    736054: []string{"VXUS"},
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000052848&action=getcompany
-    52848: []string{"VAW", "VOX", "VPU", "VCR", "VDC", "VDE", "VFH", "VHT", "VIS", "VGT", "EDV", "MGC", "MGV", "MGK", "VSGX", "ESGV", "VCEB", "VEXC"},
+var cikToEtfs = map[int][]string{}
+var seriesToEtfs = map[IndexId]string{}
+
+// TODO: This needs to be shared with the tools dir.
+type StoredIndex struct {
+  SeriesId string `json:"series_id"`
+  Name string `json:"name"`
+}
+
+func initEtfs() error {
+  m := map[int][]StoredIndex{}
+  if err := readJsonFile(kStoredIndexFile, &m); err != nil {
+    return err
   }
-  return kCikToETFs[cik]
+
+  for cik, indexes := range m {
+    for _, index := range indexes {
+      etfs, _ := cikToEtfs[cik]
+      etfs = append(etfs, index.Name)
+      cikToEtfs[cik] = etfs
+      seriesToEtfs[IndexId{cik, index.SeriesId}] = index.Name
+    }
+  }
+  return nil
+}
+
+// TODO: Remove those.
+func etfs(cik int) []string {
+  return cikToEtfs[cik]
 }
 
 func etfName(cik int, seriesId string) string {
-  // Note: The full list of mutual fund is listed at: https://www.sec.gov/files/company_tickers_mf.json
-  kSeriesToETF := map[IndexId]string{
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000036405&action=getcompany
-    IndexId{36405, "S000002839"}: "VOO",
-    IndexId{36405, "S000002840"}: "VTV",
-    IndexId{36405, "S000002841"}: "VXF",
-    IndexId{36405, "S000002842"}: "VUG",
-    IndexId{36405, "S000002843"}: "VV",
-    IndexId{36405, "S000002844"}: "VO",
-    IndexId{36405, "S000002845"}: "VB",
-    IndexId{36405, "S000002846"}: "VBK",
-    IndexId{36405, "S000002847"}: "VBR",
-    IndexId{36405, "S000002848"}: "VTI",
-    IndexId{36405, "S000012756"}: "VOT",
-    IndexId{36405, "S000012757"}: "VOE",
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000736054&action=getcompany
-    IndexId{736054, "S000002932"}: "VXUS",
-    // Pulled from https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=0000052848&action=getcompany
-    IndexId{52848, "S000004441"}: "VAW",
-    IndexId{52848, "S000004443"}: "VOX",
-    IndexId{52848, "S000004445"}: "VPU",
-    IndexId{52848, "S000004446"}: "VCR",
-    IndexId{52848, "S000004447"}: "VDC",
-    IndexId{52848, "S000004448"}: "VDE",
-    IndexId{52848, "S000004449"}: "VFH",
-    IndexId{52848, "S000004450"}: "VHT",
-    IndexId{52848, "S000004451"}: "VIS",
-    IndexId{52848, "S000004452"}: "VGT",
-    IndexId{52848, "S000018789"}: "EDV",
-    IndexId{52848, "S000019698"}: "MGC",
-    IndexId{52848, "S000019699"}: "MGV",
-    IndexId{52848, "S000019700"}: "MGK",
-    IndexId{52848, "S000063074"}: "VSGX",
-    IndexId{52848, "S000063075"}: "ESGV",
-    IndexId{52848, "S000069584"}: "VCEB",
-    IndexId{52848, "S000094513"}: "VEXC",
-  }
-
-  etfName, _ := kSeriesToETF[IndexId{cik, seriesId}]
+  etfName, _ := seriesToEtfs[IndexId{cik, seriesId}]
   return etfName
 }
 
@@ -379,6 +361,16 @@ func readFetchedDate() FetchedDatesMap {
     panic(fmt.Sprintf("Couldn't JSON decode the fetched date file, err=%+v", err))
   }
   return v
+}
+
+func readJsonFile(path string, v any) error {
+  f, err := os.Open(path)
+  if err != nil {
+    return err
+  }
+
+  decoder := json.NewDecoder(f)
+  return decoder.Decode(v)
 }
 
 func writeToJsonFile(path string, v any) error {
@@ -479,13 +471,25 @@ func buildIndexMap(cik int, fetchedDates FilingDateSpan) map[string][]Index {
   return indexMap
 }
 
-func main() {
+func initAll() error {
+  // Init the ETF maps.
+  if err := initEtfs(); err != nil {
+    return err
+  }
+
   // Ensure that the output directories are present before fetching.
   if err := os.MkdirAll("data/latest", 0755); err != nil {
-    panic("Couldn't create directory data/latest")
+    return err
   }
   if err := os.MkdirAll("data/all", 0755); err != nil {
-    panic("Couldn't create directory data/latest")
+    return err
+  }
+  return nil
+}
+
+func main() {
+  if err := initAll(); err != nil {
+    panic(fmt.Sprintf("Initialization failed with err=%+v", err))
   }
   fetchedDateMap := readFetchedDate()
   fmt.Printf("FetchedMap: %+v\n", fetchedDateMap)

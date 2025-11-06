@@ -141,7 +141,7 @@ func processHTML(cik int, r io.Reader) (map[string]string, error) {
   }
 }
 
-type Index struct {
+type StoredIndex struct {
   SeriesId string `json:"series_id"`
   Name string `json:"name"`
 }
@@ -195,7 +195,7 @@ func main() {
   c := edgar_client.NewWithRps(ua, 5)
 
   // TODO: I could also get this info from https://www.sec.gov/files/company_tickers_mf.json if I had the list of Vanguard ETFs.
-  output := map[int][]Index{}
+  output := map[int][]StoredIndex{}
   // This is the main list of ciks that we look at.
   ciks := []int{36405, 52848, 105563, 106830, 736054, 857489, 891190, 1021882}
   for _, cik := range ciks {
@@ -209,9 +209,9 @@ func main() {
       panic(fmt.Sprintf("Error processing html %+v", err))
     }
 
-    etfs := []Index{}
+    etfs := []StoredIndex{}
     for seriesId, name := range seriesToEtfMap {
-      etfs = append(etfs, Index{seriesId, name})
+      etfs = append(etfs, StoredIndex{seriesId, name})
     }
     output[cik] = etfs
   }
