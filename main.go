@@ -149,7 +149,7 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
   return index
 }
 
-func fetchSingleSubmission(c edgar_client.EdgarClient, info SubmissionInfo) (Index, error) {
+func fetchSingleSubmission(c *edgar_client.EdgarClient, info SubmissionInfo) (Index, error) {
   // Note: We convert companyId to int to trim the leading zero that are not needed.
   url := fmt.Sprintf(kUrlSingleSubmissionXml, info.Cik, info.AccessionNumber)
   fmt.Printf("About to query %s\n", url)
@@ -187,7 +187,7 @@ type SubmissionInfo struct {
   FilingDate string
 }
 
-func fetchAllSubmissions(c edgar_client.EdgarClient, cik int) ([]SubmissionInfo, error) {
+func fetchAllSubmissions(c *edgar_client.EdgarClient, cik int) ([]SubmissionInfo, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
   fmt.Printf("About to query %s\n", url)
 
@@ -511,7 +511,7 @@ func main() {
     //
     // Fetching all the potential submissions is prohibitive so we have a hard limit.
     // Ideally we should replace with something better, like a per-seriesId search.
-    submissions, err := fetchAllSubmissions(c, cik)
+    submissions, err := fetchAllSubmissions(&c, cik)
     if err != nil {
       fmt.Printf("Error fetching/parsing all submissions JSON, err=%+v\n", err)
       return
@@ -550,7 +550,7 @@ func main() {
     // TODO: Add a debugging mode as this is verbose: fmt.Printf("submissions to fetch = %+v", submissions)
 
     for _, submission := range submissions {
-      index, err := fetchSingleSubmission(c, submission)
+      index, err := fetchSingleSubmission(&c, submission)
       if err != nil {
         fmt.Printf("Error fetching/parsing single XML submission for %+v, err=%+v\n", submission, err)
       }
