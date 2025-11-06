@@ -314,6 +314,7 @@ type IndexId struct {
 
 var cikToEtfs = map[int][]string{}
 var seriesToEtfs = map[IndexId]string{}
+var ciks = []int{}
 
 // TODO: This needs to be shared with the tools dir.
 type StoredIndex struct {
@@ -328,6 +329,7 @@ func initEtfs() error {
   }
 
   for cik, indexes := range m {
+    ciks = append(ciks, cik)
     for _, index := range indexes {
       etfs, _ := cikToEtfs[cik]
       etfs = append(etfs, index.Name)
@@ -335,6 +337,7 @@ func initEtfs() error {
       seriesToEtfs[IndexId{cik, index.SeriesId}] = index.Name
     }
   }
+  //fmt.Printf("ciks=%+v, cikToEtfs=%+v, seriesToEtfs=%+v", ciks, cikToEtfs, seriesToEtfs)
   return nil
 }
 
@@ -500,12 +503,7 @@ func main() {
   }
   c := edgar_client.NewWithRps(ua, 5)
 
-  // We store the CIK for the reporting company as int as we need to
-  // pad them with 0s in some cases, but not all.
-  // If you add a new company's CIK here, make sure to add the new
-  // ETFs to() etfName or we will ignore them.
-  kCompanyIds := []int{52848, 36405, 736054}
-  for _, cik := range kCompanyIds {
+  for _, cik := range ciks {
     fetchedDates := fetchedDateMap[cik]
     indexMap := buildIndexMap(cik, fetchedDates)
     // Vanguard has a lot of submissions, unfortunately we don't know which ones are useful
