@@ -29,7 +29,7 @@ const kDefaultThrottleDuration = 105 * time.Millisecond
 // Thus we implement a global limit over the token bucket's alleged window.
 //
 // Those limits are best guesses and somewhat conservative to prevent being banned.
-const kFetchesBeforeSleep = 100
+const kFetchesBeforeSleep = 80
 const kGlobalSleepDuration = 12 * time.Minute
 
 func New(userAgent string) EdgarClient {
@@ -76,7 +76,7 @@ func (c EdgarClient) Sleep() {
   c.rpsThrottler = nil
 }
 
-func (c EdgarClient) GetResp(url string) (*http.Response, error) {
+func (c *EdgarClient) GetResp(url string) (*http.Response, error) {
   if c.globalThrottler != nil {
     if c.remainingFetches <= 0 {
       c.Sleep()
@@ -112,7 +112,7 @@ func (c EdgarClient) GetResp(url string) (*http.Response, error) {
   return resp, err
 }
 
-func (c EdgarClient) GetXml(url string, v any) error {
+func (c *EdgarClient) GetXml(url string, v any) error {
   resp, err := c.GetResp(url)
   if err != nil {
     return err
@@ -124,7 +124,7 @@ func (c EdgarClient) GetXml(url string, v any) error {
   return decoder.Decode(v)
 }
 
-func (c EdgarClient) GetJson(url string, v any) error {
+func (c *EdgarClient) GetJson(url string, v any) error {
   resp, err := c.GetResp(url)
   if err != nil {
     return err
