@@ -90,7 +90,7 @@ type Index struct {
   SeriesId string `json:"series_id"`
   FilingDate string `json:"filing_date"`
   // Note: The components may add up to more than 100%.
-  Components []IndexComponent
+  Components []IndexComponent `json:"components"`
 }
 
 func getIdentifier(c invstOrSec) (string, string) {
