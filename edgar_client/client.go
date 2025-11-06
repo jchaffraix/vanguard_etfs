@@ -1,4 +1,4 @@
-package main
+package edgar_client
 
 import (
   "encoding/xml"
@@ -32,14 +32,14 @@ const kDefaultThrottleDuration = 105 * time.Millisecond
 const kFetchesBeforeSleep = 100
 const kGlobalSleepDuration = 12 * time.Minute
 
-func NewEdgarClient(userAgent string) EdgarClient {
+func New(userAgent string) EdgarClient {
   // TODO: Get the context with the caller so we can cancel all requests?
   // TODO: What should be passed to the client?
   client := &http.Client{}
   return EdgarClient{userAgent, kDefaultThrottleDuration, client, nil, kFetchesBeforeSleep, nil}
 }
 
-func NewEdgarClientWithRps(userAgent string, rps int) EdgarClient {
+func NewWithRps(userAgent string, rps int) EdgarClient {
   if rps <= 0 {
     panic("RPS must be in [1, 10]")
   }

@@ -5,6 +5,7 @@ import (
   "encoding/xml"
   "fmt"
   "os"
+  "edgar_client"
   "slices"
   "strings"
 )
@@ -147,7 +148,7 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
   return index
 }
 
-func fetchSingleSubmission(c EdgarClient, info SubmissionInfo) (Index, error) {
+func fetchSingleSubmission(c edgar_client.EdgarClient, info SubmissionInfo) (Index, error) {
   // Note: We convert companyId to int to trim the leading zero that are not needed.
   url := fmt.Sprintf(kUrlSingleSubmissionXml, info.Cik, info.AccessionNumber)
   fmt.Printf("About to query %s\n", url)
@@ -185,7 +186,7 @@ type SubmissionInfo struct {
   FilingDate string
 }
 
-func fetchAllSubmissions(c EdgarClient, cik int) ([]SubmissionInfo, error) {
+func fetchAllSubmissions(c edgar_client.EdgarClient, cik int) ([]SubmissionInfo, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
   fmt.Printf("About to query %s\n", url)
 
@@ -493,7 +494,7 @@ func main() {
   if ua == "" {
     panic("No \"$USER_AGENT\" in the environment")
   }
-  c := NewEdgarClientWithRps(ua, 5)
+  c := edgar_client.NewWithRps(ua, 5)
 
   // We store the CIK for the reporting company as int as we need to
   // pad them with 0s in some cases, but not all.
