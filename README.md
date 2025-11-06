@@ -47,7 +47,7 @@ Here is a trimmed version of a specific filing:
 Each index components has the same format:
 - `name`: the name of the security, equity/bond or other ETF.
 - `id` and `id_type`: an identifier for the security and its type. Both comes from the filings and are passed as-is without processing. `id_type` is one of (by rough decreasing order of occurrence): "isin", "ticker", "sedol", "faid", "cins", "cusip", "vid".
-- `weight`: the weight of the component in the index. Weights are positive or zero. `weight` is guaranteed to fit on a single-precision floating point (`float` or `float32`).
+- `weight`: the weight of the component in the index. Weights are usually positive, but can be **negative** to indicate a short position or zero for closed positions. `weight` is guaranteed to fit on a single-precision floating point (`float` or `float32`).
 
 Important: Weights may not add up to 100%.
 
