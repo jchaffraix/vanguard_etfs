@@ -6,6 +6,9 @@ import (
   "testing"
   "net/http"
   "net/http/httptest"
+  "time"
+
+  "github.com/jmhodges/clock"
 )
 
 // This discards the body for case where we just want to check that it's fine.
@@ -33,7 +36,7 @@ func TestThrottlingGetRespNoError(t *testing.T) {
   }))
   defer server.Close()
 
-  client := New("foobar")
+  client := internalNew(clock.NewFake(), "foobar", 10)
   resp, err := client.GetResp(server.URL)
   if err != nil {
     t.Errorf("Expected error=%+v)", err)
@@ -63,7 +66,7 @@ func TestGetErrorOnRateLimited(t *testing.T) {
   }))
   defer server.Close()
 
-  client := New("foobar")
+  client := internalNew(clock.NewFake(), "foobar", 10)
   _, err := client.GetResp(server.URL)
   if err == nil {
     t.Errorf("Expected an error but got none")
@@ -77,21 +80,12 @@ func TestSingleCallSuccess(t *testing.T) {
   }))
   defer server.Close()
 
-  client := New("foobar")
-  if client.rpsThrottler != nil || client.globalThrottler != nil {
-    t.Errorf("Unexpected rpsThrottler")
-  }
-  remaining := client.remainingFetches
+  client := internalNew(clock.NewFake(), "foobar", 10)
+  remaining := client.RemainingFetchesBeforeSleeping()
   resp, err := client.GetResp(server.URL)
   checkSuccessful(t, resp, err)
-  if client.rpsThrottler == nil {
-    t.Errorf("Missing rpsThrottler after call")
-  }
-  if client.globalThrottler == nil {
-    t.Errorf("Missing globalThrottler after call")
-  }
-  if client.remainingFetches != remaining - 1 {
-    t.Errorf("remainingFetches not correct, expected=%d, but got=%d", remaining - 1, client.remainingFetches)
+  if client.RemainingFetchesBeforeSleeping() != remaining - 1 {
+    t.Errorf("RemainingFetchesBeforeSleeping() not correct, expected=%d, but got=%d", remaining - 1, client.RemainingFetchesBeforeSleeping())
   }
 }
 
@@ -101,23 +95,14 @@ func TestSingleCallServerFailure(t *testing.T) {
   }))
   defer server.Close()
 
-  client := New("foobar")
-  if client.rpsThrottler != nil || client.globalThrottler != nil {
-    t.Errorf("Unexpected rpsThrottler")
-  }
-  remaining := client.remainingFetches
+  client := internalNew(clock.NewFake(), "foobar", 10)
+  remaining := client.RemainingFetchesBeforeSleeping()
   _, err := client.GetResp(server.URL)
   if err == nil {
     t.Errorf("Should have gotten an error from the request")
   }
-  if client.rpsThrottler == nil {
-    t.Errorf("Missing rpsThrottler after call")
-  }
-  if client.globalThrottler == nil {
-    t.Errorf("Missing globalThrottler after call")
-  }
-  if client.remainingFetches != remaining - 1 {
-    t.Errorf("remainingFetches not correct, expected=%d, but got=%d", remaining - 1, client.remainingFetches)
+  if client.RemainingFetchesBeforeSleeping() != remaining - 1 {
+    t.Errorf("RemainingFetchesBeforeSleeping() not correct, expected=%d, but got=%d", remaining - 1, client.RemainingFetchesBeforeSleeping())
   }
 }
 type JsonBlob struct {
@@ -143,46 +128,51 @@ func TestThrottlingMultipleCallsAndFormats(t *testing.T) {
   }))
   defer server.Close()
 
-  client := New("foobar")
-  remaining := client.remainingFetches
+  clock := clock.NewFake()
+  client := internalNew(clock, "foobar", 10)
+  remaining := client.RemainingFetchesBeforeSleeping()
+  fetches := 0
+  before := clock.Now()
   for i := 1; i <= 5; i++ {
     resp, err := client.GetResp(server.URL)
     remaining -= 1
+    fetches += 1
     checkSuccessful(t, resp, err)
-    if client.remainingFetches != remaining {
-      t.Errorf("remainingFetches was not updated, expected=%d, but got=%d)", remaining, client.remainingFetches)
+    if client.RemainingFetchesBeforeSleeping() != remaining {
+      t.Errorf("RemainingFetchesBeforeSleeping() was not updated, expected=%d, but got=%d)", remaining, client.RemainingFetchesBeforeSleeping())
     }
     var jsonBlob JsonBlob
     err = client.GetJson(server.URL + "/json", &jsonBlob)
     remaining -= 1
+    fetches += 1
     if err != nil {
       t.Errorf("Got unexpected error on GetJson, err=%+v)", err)
     }
     if jsonBlob.Value != "fixed" {
       t.Errorf("Got unexpected value on GetJson, value=%s)", jsonBlob.Value)
     }
-    if client.remainingFetches != remaining {
-      t.Errorf("remainingFetches was not updated, expected=%d, but got=%d)", remaining, client.remainingFetches)
+    if client.RemainingFetchesBeforeSleeping() != remaining {
+      t.Errorf("RemainingFetchesBeforeSleeping() was not updated, expected=%d, but got=%d)", remaining, client.RemainingFetchesBeforeSleeping())
     }
 
     var xmlBlob XmlBlob
     err = client.GetXml(server.URL + "/xml", &xmlBlob)
     remaining -= 1
+    fetches += 1
     if err != nil {
       t.Errorf("Got unexpected error on GetXml, err=%+v)", err)
     }
     if xmlBlob.Value != "fixed" {
       t.Errorf("Got unexpected value on GetXml, value=%s)", xmlBlob.Value)
     }
-    if client.remainingFetches != remaining {
-      t.Errorf("remainingFetches was not updated, expected=%d, but got=%d)", remaining, client.remainingFetches)
+    if client.RemainingFetchesBeforeSleeping() != remaining {
+      t.Errorf("RemainingFetchesBeforeSleeping() was not updated, expected=%d, but got=%d)", remaining, client.RemainingFetchesBeforeSleeping())
     }
   }
-  // Check that we do have throttlers in place after the calls.
-  if client.rpsThrottler == nil {
-    t.Errorf("Missing rpsThrottler after call")
-  }
-  if client.globalThrottler == nil {
-    t.Errorf("Missing globalThrottler after call")
+  after := clock.Now()
+  actualDuration := after.Sub(before)
+  expectedDuration :=  time.Duration(fetches - 1) * client.rpsThrottler.d
+  if actualDuration != expectedDuration {
+    t.Errorf("Unexpected amount of time sleeping, expected=%d(%s), but got=%d(%s))", expectedDuration, expectedDuration.String(), actualDuration, actualDuration.String())
   }
 }
