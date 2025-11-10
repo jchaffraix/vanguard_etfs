@@ -197,7 +197,9 @@ func main() {
   // TODO: I could also get this info from https://www.sec.gov/files/company_tickers_mf.json if I had the list of Vanguard ETFs.
   output := map[int][]StoredIndex{}
   // This is the main list of ciks that we look at.
-  ciks := []int{36405, 52848, 105563, 106830, 736054, 857489, 891190, 1021882}
+  ciks := []int{36405, 52848,736054}
+  // TODO: Re-enable this full list once we can confirm the quality of their import.
+  //ciks := []int{36405, 52848, 105563, 106830, 736054, 857489, 891190, 1021882}
   for _, cik := range ciks {
     resp, err := c.GetResp(fmt.Sprintf("https://www.sec.gov/cgi-bin/browse-edgar?scd=series&CIK=%010d&action=getcompany", cik))
     if err != nil {
