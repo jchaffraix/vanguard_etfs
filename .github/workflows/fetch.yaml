@@ -1,4 +1,5 @@
 on:
+  workflow_dispatch:
   schedule:
     - cron: "17 17 10,20 * *"
 
