@@ -152,7 +152,7 @@ func populateIndexFromSingleSubmission(submission singleSubmission, info Submiss
 func fetchSingleSubmission(c *edgar_client.EdgarClient, info SubmissionInfo) (Index, error) {
   // Note: We convert companyId to int to trim the leading zero that are not needed.
   url := fmt.Sprintf(kUrlSingleSubmissionXml, info.Cik, info.AccessionNumber)
-  fmt.Printf("About to query %s\n", url)
+  fmt.Printf("About to query single submission: %s\n", url)
 
   submission := singleSubmission{}
   err := c.GetXml(url, &submission)
@@ -160,7 +160,8 @@ func fetchSingleSubmission(c *edgar_client.EdgarClient, info SubmissionInfo) (In
     return Index{}, nil
   }
   seriesId := submission.FormData.GenInfo.SeriesId
-  fmt.Printf("Fetched submission for %s (seriesId=%s, etfName=%s)\n", submission.FormData.GenInfo.Name, seriesId, etfName(info.Cik, seriesId))
+  etfName, _ := seriesToEtfs[IndexId{info.Cik, seriesId}]
+  fmt.Printf("Fetched single submission for %s (seriesId=%s, etfName=%s)\n", submission.FormData.GenInfo.Name, seriesId, etfName)
 
   return populateIndexFromSingleSubmission(submission, info), nil
 }
@@ -189,7 +190,7 @@ type SubmissionInfo struct {
 
 func fetchAllSubmissions(c *edgar_client.EdgarClient, cik int) ([]SubmissionInfo, error) {
   url := fmt.Sprintf(kUrlAllSubmissionsJson, cik)
-  fmt.Printf("About to query %s\n", url)
+  fmt.Printf("About to query all submissions: %s\n", url)
 
   v := AllSubmissions{}
   err := c.GetJson(url, &v)
@@ -261,10 +262,14 @@ func validateIndex(cik int, index Index) ValidationResult {
   if index.SeriesId == "" {
     res.addError(fmt.Sprintf("Index %s is missing seriesName", index.Name))
   }
-  res.etfName = etfName(cik, index.SeriesId)
-  if res.etfName == "" {
+  etfName, ok := seriesToEtfs[IndexId{cik, index.SeriesId}]
+  if !ok {
     res.addWarning(fmt.Sprintf("Index %s doesn't have a corresponding ETF in our map", index.Name))
   }
+  if etfName == "" {
+    res.addError(fmt.Sprintf("Empty name in for index %s in our map", index.Name))
+  }
+  res.etfName = etfName
 
   // If we have errors, it's not worth continuing.
   // Doing so, ensure that we have an ETF name to report.
@@ -339,16 +344,6 @@ func initEtfs() error {
   }
   //fmt.Printf("ciks=%+v, cikToEtfs=%+v, seriesToEtfs=%+v", ciks, cikToEtfs, seriesToEtfs)
   return nil
-}
-
-// TODO: Remove those.
-func etfs(cik int) []string {
-  return cikToEtfs[cik]
-}
-
-func etfName(cik int, seriesId string) string {
-  etfName, _ := seriesToEtfs[IndexId{cik, seriesId}]
-  return etfName
 }
 
 func readFetchedDate() FetchedDatesMap {
@@ -449,7 +444,7 @@ func buildIndexMap(cik int, fetchedDates FilingDateSpan) map[string][]Index {
   if fetchedDates.isEmpty() {
     return indexMap
   }
-  etfs := etfs(cik)
+  etfs := cikToEtfs[cik]
   for _, etf := range etfs {
     allFilePath := fmt.Sprintf("./data/all/%s.json", etf)
     f, err := os.Open(allFilePath)
