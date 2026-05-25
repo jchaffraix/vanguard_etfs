@@ -14,15 +14,17 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
+      with:
+        # Required for git-auto-commit-action.
+        persist-credentials: true
 
     - name: Fetching new entries
       run: go run main.go
 
-    - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v7
+    - name: Push any updates
+      uses: stefanzweifel/git-auto-commit-action@v7
       with:
-        branch: automated-fetch
         commit-message: Updating etfs data
-        sign-commits: true
-        title: "[GitHub Action] Updating etfs data"
+        branch: main
+        file-pattern: 'data/*.json'
